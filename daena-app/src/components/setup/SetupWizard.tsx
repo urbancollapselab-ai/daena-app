@@ -1,46 +1,46 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Globe, Building2, Key, Bot, Rocket, ChevronRight, ChevronLeft,
-  Check, Eye, EyeOff, Loader2, Download, Terminal, CheckCircle2,
-  XCircle, AlertTriangle, Cpu, Shield
+  Globe, Key, Bot, Rocket, ChevronRight, ChevronLeft,
+  Eye, EyeOff, Loader2, CheckCircle2, XCircle, AlertTriangle,
+  Cpu, Shield, Terminal, Download, Zap, Building2
 } from "lucide-react";
+import { useTranslation } from "@/i18n";
 
+/* ── Step definitions ─────────────────────────────── */
 const STEPS = [
-  { id: "welcome", icon: Globe, title: "Welcome", subtitle: "Language" },
-  { id: "system", icon: Cpu, title: "System", subtitle: "Dependencies" },
-  { id: "permissions", icon: Shield, title: "Permissions", subtitle: "Access" },
-  { id: "profile", icon: Building2, title: "Profile", subtitle: "About you" },
-  { id: "apikeys", icon: Key, title: "Connect", subtitle: "API keys" },
-  { id: "agents", icon: Bot, title: "Agents", subtitle: "Your team" },
-  { id: "ready", icon: Rocket, title: "Ready!", subtitle: "Let's go" },
+  { id: "welcome",  title: "Welcome",      sub: "Language" },
+  { id: "install",  title: "System Setup",  sub: "Auto-install" },
+  { id: "connect",  title: "Connect",       sub: "API Keys" },
+  { id: "team",     title: "Your Team",     sub: "Agents" },
+  { id: "ready",    title: "Ready!",        sub: "Launch" },
 ];
 
 const LANGUAGES = [
-  { code: "en" as const, name: "English", flag: "🇬🇧" },
-  { code: "tr" as const, name: "Türkçe", flag: "🇹🇷" },
+  { code: "en" as const, name: "English",    flag: "🇬🇧" },
+  { code: "tr" as const, name: "Türkçe",     flag: "🇹🇷" },
   { code: "nl" as const, name: "Nederlands", flag: "🇳🇱" },
-  { code: "ku" as const, name: "Kurdî", flag: "☀️" },
+  { code: "ku" as const, name: "Kurdî",      flag: "☀️" },
 ];
-
-import { useTranslation } from "@/i18n";
 
 const INDUSTRIES = [
   "Technology", "Construction", "Finance", "Healthcare", "E-commerce",
   "Education", "Marketing", "Real Estate", "Consulting", "Other",
 ];
 
-interface SystemCheck {
+/* ── Interfaces ───────────────────────────────────── */
+interface DepCheck {
   name: string;
-  status: "checking" | "ok" | "missing" | "optional";
+  status: "pending" | "checking" | "ok" | "installing" | "missing" | "optional";
   detail: string;
-  action?: string;
 }
 
+/* ── Main Component ───────────────────────────────── */
 export function SetupWizard() {
   const { updateSettings, settings, setSetupComplete, addConversation } = useAppStore();
   const { t } = useTranslation();
+
   const [step, setStep] = useState(0);
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -48,117 +48,144 @@ export function SetupWizard() {
   const [keyValid, setKeyValid] = useState<boolean | null>(null);
   const [companyName, setCompanyName] = useState("");
   const [industry, setIndustry] = useState("");
-  const [claudeProAvailable, setClaudeProAvailable] = useState(false);
+  const [claudeDetected, setClaudeDetected] = useState(false);
   const [anthropicKey, setAnthropicKey] = useState("");
+  const [installing, setInstalling] = useState(false);
+  const [installDone, setInstallDone] = useState(false);
   const [agentStates, setAgentStates] = useState<Record<string, boolean>>({
     finance: true, data: true, marketing: true, sales: true,
     research: true, watchdog: true, heartbeat: true, coordinator: true,
   });
-  const [permissions, setPermissions] = useState({ terminal: true, filesystem: true, network: true });
 
-  // System dependency checks
-  const [systemChecks, setSystemChecks] = useState<SystemCheck[]>([
-    { name: "Python 3.10+", status: "checking", detail: "Required for AI backend" },
-    { name: "Node.js 18+", status: "checking", detail: "Required for frontend" },
-    { name: "Claude Code (Opus 4.6)", status: "checking", detail: "Optional - premium AI brain" },
-    { name: "OpenRouter Connection", status: "checking", detail: "For 20-model cascade" },
-    { name: "Backend Server", status: "checking", detail: "Python AI server" },
+  // Dependency checks for Step 2
+  const [deps, setDeps] = useState<DepCheck[]>([
+    { name: "Python 3",              status: "pending", detail: "Required for AI backend" },
+    { name: "Node.js",               status: "pending", detail: "Required for app runtime" },
+    { name: "Claude Code (Opus 4.6)",status: "pending", detail: "Premium AI brain — optional" },
+    { name: "OpenRouter API",        status: "pending", detail: "20-model cascade endpoint" },
+    { name: "Backend Server",        status: "pending", detail: "Local AI server on port 8910" },
   ]);
 
-  // Run system checks when we reach step 1
+  /* ── Auto-scan when reaching step 1 ───────────── */
   useEffect(() => {
-    if (step === 1) {
-      runSystemChecks();
+    if (step === 1 && deps[0].status === "pending") {
+      runFullScan();
     }
   }, [step]);
 
-  const runSystemChecks = async () => {
-    const checks = [...systemChecks];
+  const updateDep = (idx: number, patch: Partial<DepCheck>) => {
+    setDeps(prev => prev.map((d, i) => i === idx ? { ...d, ...patch } : d));
+  };
 
-    // Check Python
+  const runFullScan = async () => {
+    // Mark all as checking
+    setDeps(prev => prev.map(d => ({ ...d, status: "checking" as const })));
+    await sleep(400);
+
+    // Node.js — we're running, so yes
+    updateDep(1, { status: "ok", detail: "Node.js is running (this app)" });
+    await sleep(200);
+
+    // Python + Backend
     try {
-      const res = await fetch("http://127.0.0.1:8910/health");
+      const res = await fetch("http://127.0.0.1:8910/health", { signal: AbortSignal.timeout(3000) });
       if (res.ok) {
-        checks[0] = { ...checks[0], status: "ok", detail: "Python backend is running" };
-        checks[4] = { ...checks[4], status: "ok", detail: "Backend server is running on port 8910" };
+        updateDep(0, { status: "ok", detail: "Python backend running" });
+        updateDep(4, { status: "ok", detail: "Server active on port 8910" });
+      } else throw new Error();
+    } catch {
+      updateDep(0, { status: "ok", detail: "Python likely installed" });
+      updateDep(4, { status: "missing", detail: "Backend not running yet" });
+    }
+    await sleep(200);
+
+    // Claude Code
+    try {
+      const res = await fetch("http://127.0.0.1:8910/check-claude", { signal: AbortSignal.timeout(5000) });
+      const data = await res.json();
+      if (data.available) {
+        setClaudeDetected(true);
+        updateDep(2, { status: "ok", detail: `Found: ${data.version || "Claude Code"}` });
       } else {
-        checks[0] = { ...checks[0], status: "ok", detail: "Python detected (start backend manually)" };
-        checks[4] = { ...checks[4], status: "missing", detail: "Run: python3 backend/server.py", action: "Start Backend" };
+        updateDep(2, { status: "optional", detail: "Not installed — will auto-install" });
       }
     } catch {
-      checks[0] = { ...checks[0], status: "ok", detail: "Python likely available" };
-      checks[4] = { ...checks[4], status: "missing", detail: "Backend not running. Run: python3 backend/server.py", action: "Start Backend" };
+      updateDep(2, { status: "optional", detail: "Not detected — optional upgrade" });
     }
+    await sleep(200);
 
-    // Node is available (we're running!)
-    checks[1] = { ...checks[1], status: "ok", detail: "Node.js is running (this app)" };
-
-    setSystemChecks([...checks]);
-
-    // Check Claude Code (try to detect)
-    try {
-      const res = await fetch("http://127.0.0.1:8910/health");
-      const data = await res.json();
-      // If backend is running, ask it to check claude
-      checks[2] = { ...checks[2], status: "optional", detail: "Claude Code detection requires backend" };
-    } catch {
-      checks[2] = { ...checks[2], status: "optional", detail: "Install Claude Code for Opus 4.6 access", action: "Install Guide" };
-    }
-
-    // Check OpenRouter
+    // OpenRouter
     try {
       const res = await fetch("https://openrouter.ai/api/v1/models", { signal: AbortSignal.timeout(5000) });
-      if (res.ok) {
-        checks[3] = { ...checks[3], status: "ok", detail: "OpenRouter API reachable" };
-      }
+      updateDep(3, { status: res.ok ? "ok" : "missing", detail: res.ok ? "API reachable ✓" : "Cannot reach API" });
     } catch {
-      checks[3] = { ...checks[3], status: "missing", detail: "Cannot reach OpenRouter. Check internet connection." };
+      updateDep(3, { status: "missing", detail: "No internet or API down" });
+    }
+  };
+
+  const runAutoInstall = async () => {
+    setInstalling(true);
+    const missing = deps.filter(d => d.status === "missing" || d.status === "optional");
+
+    for (const dep of missing) {
+      const idx = deps.findIndex(d => d.name === dep.name);
+      updateDep(idx, { status: "installing", detail: "Installing..." });
+      await sleep(800);
+
+      // Try Tauri command
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        if (dep.name.includes("Claude")) {
+          const res: any = await invoke("install_claude");
+          if (res.success) {
+            updateDep(idx, { status: "ok", detail: "Installed ✓" });
+            setClaudeDetected(true);
+            // Set permissions so Claude doesn't ask again
+            try { await invoke("install_dependencies"); } catch {}
+          } else {
+            updateDep(idx, { status: "optional", detail: "Skipped — install manually later" });
+          }
+        } else if (dep.name.includes("Backend")) {
+          // Backend will be started by Tauri automatically
+          updateDep(idx, { status: "ok", detail: "Will start with app" });
+        } else {
+          const res: any = await invoke("install_dependencies");
+          updateDep(idx, { status: res.success ? "ok" : "optional", detail: res.success ? "Installed ✓" : "Skipped" });
+        }
+      } catch {
+        updateDep(idx, { status: "optional", detail: "Skipped — non-critical" });
+      }
     }
 
-    setSystemChecks([...checks]);
-
-    // Try to detect Claude Pro
-    try {
-      const healthRes = await fetch("http://127.0.0.1:8910/check-claude");
-      const healthData = await healthRes.json();
-      if (healthData.available) {
-        setClaudeProAvailable(true);
-        checks[2] = { ...checks[2], status: "ok", detail: `Claude Code found: ${healthData.version || "Opus 4.6"}` };
-        setSystemChecks([...checks]);
-      }
-    } catch {
-      // Claude check endpoint might not exist yet
-    }
+    setInstalling(false);
+    setInstallDone(true);
   };
 
   const canNext = () => {
     if (step === 0) return true;
-    if (step === 1) return true; // system check is informational
-    if (step === 2) return true; // permissions
+    if (step === 1) return true;
+    if (step === 2) return apiKey.length > 10 || claudeDetected;
     if (step === 3) return companyName.length > 0;
-    if (step === 4) return apiKey.length > 10 || claudeProAvailable;
     return true;
   };
 
   const handleNext = () => {
     if (step === 2) {
-      updateSettings({ permissions });
+      updateSettings({
+        openrouterKey: apiKey,
+        anthropicKey,
+        claudePath: claudeDetected ? "/opt/homebrew/bin/claude" : undefined,
+      });
     }
     if (step === 3) {
-      updateSettings({ companyName, industry });
+      updateSettings({ companyName, industry, agentsEnabled: agentStates });
     }
     if (step === 4) {
-      updateSettings({ openrouterKey: apiKey, anthropicKey, claudePath: claudeProAvailable ? "/opt/homebrew/bin/claude" : undefined });
-    }
-    if (step === 5) {
-      updateSettings({ agentsEnabled: agentStates });
-    }
-    if (step === 6) {
       addConversation();
       setSetupComplete(true);
       return;
     }
-    setStep((s) => s + 1);
+    setStep(s => s + 1);
   };
 
   const testApiKey = async () => {
@@ -174,14 +201,17 @@ export function SetupWizard() {
     setTesting(false);
   };
 
+  const allOk = deps.every(d => d.status === "ok" || d.status === "optional");
+  const hasMissing = deps.some(d => d.status === "missing" || d.status === "optional");
+
   const AGENT_LIST = [
-    { id: "finance", icon: "💰", name: "Finance", desc: "Invoicing, budgets, expenses" },
-    { id: "data", icon: "📊", name: "Data", desc: "Leads, CRM, enrichment" },
-    { id: "marketing", icon: "📣", name: "Marketing", desc: "Content, campaigns, SEO" },
-    { id: "sales", icon: "🎯", name: "Sales", desc: "Outreach, proposals, deals" },
-    { id: "research", icon: "🔬", name: "Research", desc: "Market & competitor analysis" },
-    { id: "watchdog", icon: "🛡️", name: "Watchdog", desc: "System health monitoring" },
-    { id: "heartbeat", icon: "💓", name: "Heartbeat", desc: "Uptime & scheduled reports" },
+    { id: "finance",     icon: "💰", name: "Finance",     desc: "Invoicing, budgets, expenses" },
+    { id: "data",        icon: "📊", name: "Data",        desc: "Leads, CRM, enrichment" },
+    { id: "marketing",   icon: "📣", name: "Marketing",   desc: "Content, campaigns, SEO" },
+    { id: "sales",       icon: "🎯", name: "Sales",       desc: "Outreach, proposals, deals" },
+    { id: "research",    icon: "🔬", name: "Research",    desc: "Market & competitor analysis" },
+    { id: "watchdog",    icon: "🛡️", name: "Watchdog",    desc: "System health monitoring" },
+    { id: "heartbeat",   icon: "💓", name: "Heartbeat",   desc: "Uptime & scheduled reports" },
     { id: "coordinator", icon: "🎭", name: "Coordinator", desc: "Inter-agent task routing" },
   ];
 
@@ -196,7 +226,7 @@ export function SetupWizard() {
         animate={{ opacity: 1, scale: 1 }}
         className="glass w-full max-w-xl mx-4 relative z-10"
       >
-        {/* Step indicators */}
+        {/* Step dots */}
         <div className="flex items-center justify-center gap-2 pt-6 pb-2">
           {STEPS.map((s, i) => (
             <div key={s.id} className={`wizard-step-dot ${i === step ? "active" : i < step ? "done" : ""}`} />
@@ -204,7 +234,7 @@ export function SetupWizard() {
         </div>
 
         {/* Content */}
-        <div className="px-8 py-6 min-h-[380px]">
+        <div className="px-8 py-6 min-h-[400px]">
           <AnimatePresence mode="wait">
             <motion.div
               key={step}
@@ -213,19 +243,19 @@ export function SetupWizard() {
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.2 }}
             >
-              {/* STEP 0: Welcome */}
+              {/* ═══════════ STEP 0: Welcome ═══════════ */}
               {step === 0 && (
                 <div className="space-y-6">
                   <div className="text-center">
-                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)] flex items-center justify-center text-3xl mx-auto mb-4 shadow-lg shadow-[var(--color-primary-dim)]">
-                      🔥
+                    <div className="w-20 h-20 rounded-3xl mx-auto mb-4 overflow-hidden shadow-lg shadow-[var(--color-primary-dim)]">
+                      <img src="/daena-logo.png" alt="Daena" className="w-full h-full object-cover" />
                     </div>
-                    <h2 className="text-2xl font-bold mb-1">{t("setup.welcome")}</h2>
-                    <p className="text-[var(--color-text-secondary)] text-sm">{t("setup.welcomeDesc")}</p>
-                    <p className="text-[0.625rem] text-[var(--color-text-tertiary)] mt-1">8 AI {t("nav.agents")?.toLowerCase()} • 20 models</p>
+                    <h2 className="text-2xl font-extrabold mb-1">Welcome to Daena</h2>
+                    <p className="text-sm text-[var(--color-text-secondary)]">Your autonomous AI command center</p>
+                    <p className="text-xs text-[var(--color-text-tertiary)] mt-1">8 AI agents • 20 models • Zero config</p>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    {LANGUAGES.map((lang) => (
+                    {LANGUAGES.map(lang => (
                       <button
                         key={lang.code}
                         onClick={() => updateSettings({ language: lang.code })}
@@ -234,299 +264,253 @@ export function SetupWizard() {
                         }`}
                       >
                         <div className="text-2xl mb-1">{lang.flag}</div>
-                        <div className="text-sm font-medium">{lang.name}</div>
+                        <div className="text-sm font-semibold">{lang.name}</div>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* STEP 1: System Check */}
+              {/* ═══════════ STEP 1: System Scan & Auto-Install ═══════════ */}
               {step === 1 && (
-                <div className="space-y-5">
+                <div className="space-y-4">
                   <div className="text-center mb-4">
-                    <Cpu size={32} className="mx-auto mb-2 text-[var(--color-primary)]" />
-                    <h2 className="text-xl font-bold">{t("setup.systemTitle") || "System Check"}</h2>
-                    <p className="text-[var(--color-text-secondary)] text-sm">{t("setup.systemDesc") || "Verifying your setup"}</p>
+                    <Cpu size={36} className="mx-auto mb-2 text-[var(--color-primary)]" />
+                    <h2 className="text-xl font-extrabold">System Setup</h2>
+                    <p className="text-sm text-[var(--color-text-secondary)]">Scanning your system & auto-installing dependencies</p>
                   </div>
+
                   <div className="space-y-2">
-                    {systemChecks.map((check, i) => (
+                    {deps.map((dep, i) => (
                       <motion.div
-                        key={check.name}
+                        key={dep.name}
                         initial={{ opacity: 0, x: -10 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.1 }}
+                        transition={{ delay: i * 0.08 }}
                         className="glass-sm p-3 flex items-center gap-3"
                       >
-                        {check.status === "checking" && <Loader2 size={16} className="animate-spin text-[var(--color-primary)]" />}
-                        {check.status === "ok" && <CheckCircle2 size={16} className="text-[var(--color-accent)]" />}
-                        {check.status === "missing" && <XCircle size={16} className="text-[var(--color-error)]" />}
-                        {check.status === "optional" && <AlertTriangle size={16} className="text-[var(--color-warning)]" />}
+                        {dep.status === "pending" && <div className="w-4 h-4 rounded-full bg-[var(--color-surface-active)]" />}
+                        {dep.status === "checking" && <Loader2 size={16} className="animate-spin text-[var(--color-primary)]" />}
+                        {dep.status === "installing" && <Loader2 size={16} className="animate-spin text-[var(--color-gold)]" />}
+                        {dep.status === "ok" && <CheckCircle2 size={16} className="text-[var(--color-accent)]" />}
+                        {dep.status === "missing" && <XCircle size={16} className="text-[var(--color-error)]" />}
+                        {dep.status === "optional" && <AlertTriangle size={16} className="text-[var(--color-warning)]" />}
                         <div className="flex-1">
-                          <div className="text-sm font-medium">{check.name}</div>
-                          <div className="text-[0.625rem] text-[var(--color-text-tertiary)]">{check.detail}</div>
+                          <div className="text-sm font-semibold">{dep.name}</div>
+                          <div className="text-xs text-[var(--color-text-tertiary)]">{dep.detail}</div>
                         </div>
-                        {check.status === "ok" && <span className="badge badge-green">Ready</span>}
-                        {check.status === "missing" && <span className="badge badge-red">Missing</span>}
-                        {check.status === "optional" && <span className="badge badge-amber">Optional</span>}
+                        {dep.status === "ok" && <span className="badge badge-green">Ready</span>}
+                        {dep.status === "installing" && <span className="badge badge-gold">Installing</span>}
+                        {dep.status === "missing" && <span className="badge badge-red">Missing</span>}
+                        {dep.status === "optional" && <span className="badge badge-amber">Optional</span>}
                       </motion.div>
                     ))}
                   </div>
-                  {claudeProAvailable && (
-                    <div className="glass-sm p-3 border-[var(--color-accent)] bg-[var(--color-accent-dim)]">
-                      <p className="text-xs text-[var(--color-accent)] font-medium">
+
+                  {/* Auto-install button */}
+                  {hasMissing && !installing && !installDone && allOk === false && (
+                    <button onClick={runAutoInstall} className="btn-primary py-2.5 text-sm w-full justify-center">
+                      <Download size={16} /> Install All Missing Dependencies
+                    </button>
+                  )}
+
+                  {installing && (
+                    <div className="glass-sm p-3 flex items-center gap-3 border-[var(--color-gold)]/30">
+                      <Loader2 size={16} className="animate-spin text-[var(--color-gold)]" />
+                      <span className="text-sm text-[var(--color-gold)]">Installing... This may take a minute.</span>
+                    </div>
+                  )}
+
+                  {claudeDetected && (
+                    <div className="glass-sm p-3 border-[var(--color-accent)]/30 bg-[var(--color-accent-dim)]">
+                      <p className="text-xs text-[var(--color-accent)] font-semibold">
                         🎉 Claude Pro detected! Opus 4.6 will be your primary brain.
                       </p>
                     </div>
                   )}
-                  <div className="glass-sm p-3 flex flex-col gap-2">
-                    <p className="text-[0.625rem] text-[var(--color-text-tertiary)]">
-                      Daena can install missing dependencies automatically.
-                    </p>
-                    {systemChecks.some(c => c.status === "missing" || c.status === "optional") && (
-                      <button 
-                        onClick={async () => {
-                          const { invoke } = await import('@tauri-apps/api/core');
-                          setTesting(true);
-                          try {
-                            const res: any = await invoke('install_dependencies');
-                            if(res.success) {
-                              runSystemChecks();
-                            }
-                          } catch(err) {
-                            console.error(err);
-                          }
-                          setTesting(false);
-                        }}
-                        disabled={testing}
-                        className="btn-primary py-2 text-xs w-full justify-center"
-                      >
-                        {testing ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} 
-                        {testing ? "Installing (This may take a while)..." : "Install Missing Requirements"}
-                      </button>
-                    )}
+
+                  {/* Permissions notice */}
+                  <div className="glass-sm p-3 border-[var(--color-warning)]/20 bg-[var(--color-warning)]/5">
+                    <div className="flex items-start gap-2">
+                      <Shield size={14} className="text-[var(--color-warning)] mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs text-[var(--color-warning)] font-semibold mb-1">Autonomous Access</p>
+                        <p className="text-xs text-[var(--color-text-tertiary)]">
+                          Daena's agents need terminal & file system access to work autonomously. 
+                          These permissions are granted once during setup — no repeated prompts.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* STEP 2: Permissions */}
+              {/* ═══════════ STEP 2: API Connection ═══════════ */}
               {step === 2 && (
                 <div className="space-y-4">
                   <div className="text-center mb-4">
-                    <Shield size={32} className="mx-auto mb-2 text-[var(--color-primary)]" />
-                    <h2 className="text-xl font-bold">Local Permissions</h2>
-                    <p className="text-[var(--color-text-secondary)] text-sm">Daena acts autonomously. Grant permissions below.</p>
+                    <Key size={36} className="mx-auto mb-2 text-[var(--color-accent)]" />
+                    <h2 className="text-xl font-extrabold">Connect Your AI</h2>
+                    <p className="text-sm text-[var(--color-text-secondary)]">Link your API keys to power the 20-model cascade</p>
                   </div>
-                  <div className="space-y-3">
-                    <div className="glass-sm p-4 flex items-start gap-4 cursor-pointer" onClick={() => setPermissions(p => ({...p, terminal: !p.terminal}))}>
-                      <Terminal size={24} className={permissions.terminal ? "text-[var(--color-accent)]" : "text-white/20"} />
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-sm">Terminal Execution</h3>
-                        <p className="text-xs text-[var(--color-text-tertiary)] mb-2">Allow agents to run system commands, run code, and install packages via Claude Code.</p>
-                        <ToggleSwitch checked={permissions.terminal} onChange={(v) => setPermissions(p => ({...p, terminal: v}))} />
-                      </div>
-                    </div>
-                    <div className="glass-sm p-4 flex items-start gap-4 cursor-pointer" onClick={() => setPermissions(p => ({...p, filesystem: !p.filesystem}))}>
-                      <Globe size={24} className={permissions.filesystem ? "text-[var(--color-primary)]" : "text-white/20"} />
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-sm">File System Access</h3>
-                        <p className="text-xs text-[var(--color-text-tertiary)] mb-2">Allow agents to read, write, and modify files in your workspace.</p>
-                        <ToggleSwitch checked={permissions.filesystem} onChange={(v) => setPermissions(p => ({...p, filesystem: v}))} />
-                      </div>
-                    </div>
-                    <div className="glass-sm p-4 border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10">
-                      <p className="text-xs text-[var(--color-warning)] font-medium">⚠️ By granting access, the AI behaves like a human coworker on this machine. Proceed with caution.</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 3: Profile */}
-              {step === 3 && (
-                <div className="space-y-5">
-                  <div className="text-center mb-4">
-                    <Building2 size={32} className="mx-auto mb-2 text-[var(--color-primary)]" />
-                    <h2 className="text-xl font-bold">{t("setup.profile") || "Your Profile"}</h2>
-                    <p className="text-[var(--color-text-secondary)] text-sm">{t("setup.nameDesc") || "Help Daena personalize your experience"}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-[var(--color-text-secondary)] mb-1.5 block">Company / Project Name *</label>
-                    <input
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      placeholder="e.g. Acme Corp"
-                      className="glass-input w-full px-4 py-3 text-sm"
-                      autoFocus
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-[var(--color-text-secondary)] mb-1.5 block">Industry</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {INDUSTRIES.map((ind) => (
-                        <button
-                          key={ind}
-                          onClick={() => setIndustry(ind)}
-                          className={`glass-sm glass-hover px-3 py-2 text-xs text-left transition-all ${
-                            industry === ind ? "!border-[var(--color-primary)] bg-[var(--color-primary-dim)] text-[var(--color-text-primary)]" : "text-[var(--color-text-secondary)]"
-                          }`}
-                        >
-                          {ind}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 4: API Keys + Claude Pro */}
-              {step === 4 && (
-                <div className="space-y-4">
-                  <div className="text-center mb-4">
-                    <Key size={32} className="mx-auto mb-2 text-[var(--color-accent)]" />
-                    <h2 className="text-xl font-bold">Connect Your Brain</h2>
-                    <p className="text-[var(--color-text-secondary)] text-sm">Configure your AI connections</p>
-                  </div>
-
-                  {/* Claude Pro detection */}
-                  {claudeProAvailable && (
-                    <div className="glass-sm p-3 border-[var(--color-accent)] bg-[var(--color-accent-dim)]">
-                      <div className="flex items-center gap-2 mb-1">
-                        <CheckCircle2 size={14} className="text-[var(--color-accent)]" />
-                        <span className="text-xs font-semibold text-[var(--color-accent)]">Claude Pro Connected</span>
-                      </div>
-                      <p className="text-[0.625rem] text-[var(--color-text-secondary)]">
-                        Opus 4.6 is your primary brain. OpenRouter is used as fallback.
-                      </p>
-                    </div>
-                  )}
 
                   {/* OpenRouter Key */}
                   <div>
-                    <label className="text-xs font-medium text-[var(--color-text-secondary)] mb-1.5 block">
-                      OpenRouter API Key {claudeProAvailable ? "(backup)" : "*"}
+                    <label className="text-xs font-semibold text-[var(--color-text-secondary)] mb-1.5 block">
+                      OpenRouter API Key {!claudeDetected && <span className="text-[var(--color-error)]">*</span>}
                     </label>
                     <div className="relative">
                       <input
                         type={showKey ? "text" : "password"}
                         value={apiKey}
-                        onChange={(e) => { setApiKey(e.target.value); setKeyValid(null); }}
+                        onChange={e => setApiKey(e.target.value)}
                         placeholder="sk-or-v1-..."
-                        className="glass-input w-full px-4 py-3 pr-20 text-sm font-mono"
+                        className="glass-input w-full px-4 py-3 pr-20 text-sm"
                       />
                       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                        <button onClick={() => setShowKey(!showKey)} className="p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-tertiary)]">
+                        <button onClick={() => setShowKey(!showKey)} className="p-1.5 hover:bg-white/5 rounded-lg">
                           {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
                         </button>
-                        <button onClick={testApiKey} disabled={apiKey.length < 10 || testing} className="btn-ghost text-[0.625rem] py-1 px-2">
+                        <button
+                          onClick={testApiKey}
+                          disabled={apiKey.length < 10 || testing}
+                          className="px-2 py-1 text-xs font-semibold rounded-lg bg-[var(--color-primary-dim)] text-[var(--color-primary)] disabled:opacity-30"
+                        >
                           {testing ? <Loader2 size={12} className="animate-spin" /> : "Test"}
                         </button>
                       </div>
                     </div>
-                    {keyValid !== null && (
-                      <p className={`text-xs mt-1.5 ${keyValid ? "text-[var(--color-accent)]" : "text-[var(--color-error)]"}`}>
-                        {keyValid ? "✓ API key is valid! 13 free models available." : "✗ Invalid key."}
+                    {keyValid === true && (
+                      <p className="text-xs text-[var(--color-accent)] mt-1.5 flex items-center gap-1">
+                        <CheckCircle2 size={12} /> Key valid — 20 models available
                       </p>
                     )}
-                    <p className="text-[0.625rem] text-[var(--color-text-tertiary)] mt-1">
-                      Free from <a href="https://openrouter.ai" target="_blank" className="text-[var(--color-primary)] underline">openrouter.ai</a> — no credit card needed
+                    {keyValid === false && (
+                      <p className="text-xs text-[var(--color-error)] mt-1.5 flex items-center gap-1">
+                        <XCircle size={12} /> Invalid key. Check and try again.
+                      </p>
+                    )}
+                    <p className="text-xs text-[var(--color-text-tertiary)] mt-1.5">
+                      Get a free key at <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" className="text-[var(--color-primary)] underline">openrouter.ai/keys</a>
                     </p>
                   </div>
 
                   {/* Anthropic Key (optional) */}
                   <div>
-                    <label className="text-xs font-medium text-[var(--color-text-secondary)] mb-1.5 block">
+                    <label className="text-xs font-semibold text-[var(--color-text-secondary)] mb-1.5 block">
                       Anthropic API Key <span className="text-[var(--color-text-tertiary)]">(optional)</span>
                     </label>
                     <input
                       type="password"
                       value={anthropicKey}
-                      onChange={(e) => setAnthropicKey(e.target.value)}
+                      onChange={e => setAnthropicKey(e.target.value)}
                       placeholder="sk-ant-..."
-                      className="glass-input w-full px-4 py-3 text-sm font-mono"
+                      className="glass-input w-full px-4 py-3 text-sm"
                     />
-                    <p className="text-[0.625rem] text-[var(--color-text-tertiary)] mt-1">
-                      For direct Claude API access ($15/M tokens)
-                    </p>
                   </div>
 
-                  <div className="glass-sm p-3">
-                    <p className="text-xs text-[var(--color-text-secondary)]">
-                      <strong className="text-[var(--color-accent)]">Brain Cascade:</strong>{" "}
-                      {claudeProAvailable ? "Opus 4.6 → " : ""}
-                      13 free OpenRouter models → 7 paid models. Your AI <strong>never</strong> goes silent.
-                    </p>
-                  </div>
+                  {claudeDetected && (
+                    <div className="glass-sm p-3 bg-[var(--color-accent-dim)] border-[var(--color-accent)]/30">
+                      <p className="text-xs text-[var(--color-accent)] font-semibold">
+                        ✓ Claude Code Pro detected — you can skip the API key if you want.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* STEP 5: Agents */}
-              {step === 5 && (
+              {/* ═══════════ STEP 3: Team Setup ═══════════ */}
+              {step === 3 && (
                 <div className="space-y-4">
-                  <div className="text-center mb-4">
-                    <Bot size={32} className="mx-auto mb-2 text-[var(--color-gold)]" />
-                    <h2 className="text-xl font-bold">Your AI Team</h2>
-                    <p className="text-[var(--color-text-secondary)] text-sm">Enable the agents you need</p>
+                  <div className="text-center mb-3">
+                    <Bot size={36} className="mx-auto mb-2 text-[var(--color-gold)]" />
+                    <h2 className="text-xl font-extrabold">Build Your Team</h2>
+                    <p className="text-sm text-[var(--color-text-secondary)]">Tell us about you & choose your AI agents</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 max-h-[260px] overflow-y-auto pr-1">
-                    {AGENT_LIST.map((ag) => (
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className="text-xs font-semibold text-[var(--color-text-secondary)] mb-1 block">Company / Project *</label>
+                      <input value={companyName} onChange={e => setCompanyName(e.target.value)}
+                        placeholder="Your company name" className="glass-input w-full px-4 py-2.5 text-sm" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-xs font-semibold text-[var(--color-text-secondary)] mb-1 block">Industry</label>
+                      <select value={industry} onChange={e => setIndustry(e.target.value)}
+                        className="glass-input w-full px-4 py-2.5 text-sm">
+                        <option value="">Select...</option>
+                        {INDUSTRIES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    {AGENT_LIST.map(ag => (
                       <button
                         key={ag.id}
-                        onClick={() => setAgentStates((s) => ({ ...s, [ag.id]: !s[ag.id] }))}
+                        onClick={() => setAgentStates(s => ({ ...s, [ag.id]: !s[ag.id] }))}
                         className={`glass-sm glass-hover p-3 text-left transition-all ${
-                          agentStates[ag.id] ? "!border-[var(--color-accent)] bg-[var(--color-accent-dim)]" : "opacity-50"
+                          agentStates[ag.id] ? "!border-[var(--color-accent)]/40 bg-[var(--color-accent-dim)]" : "opacity-50"
                         }`}
                       >
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2">
                           <span className="text-lg">{ag.icon}</span>
-                          <span className="text-sm font-medium">{ag.name}</span>
-                          {agentStates[ag.id] && <Check size={12} className="ml-auto text-[var(--color-accent)]" />}
+                          <div>
+                            <div className="text-xs font-semibold">{ag.name}</div>
+                            <div className="text-[0.625rem] text-[var(--color-text-tertiary)]">{ag.desc}</div>
+                          </div>
                         </div>
-                        <p className="text-[0.625rem] text-[var(--color-text-tertiary)]">{ag.desc}</p>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* STEP 6: Ready */}
-              {step === 6 && (
+              {/* ═══════════ STEP 4: Ready ═══════════ */}
+              {step === 4 && (
                 <div className="space-y-6 text-center py-4">
                   <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    transition={{ type: "spring", stiffness: 200, delay: 0.1 }}
-                    className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)] flex items-center justify-center text-4xl mx-auto shadow-lg shadow-[var(--color-primary-dim)]"
+                    transition={{ type: "spring", stiffness: 200, damping: 15 }}
                   >
-                    🚀
+                    <div className="w-24 h-24 rounded-3xl mx-auto overflow-hidden shadow-2xl shadow-[var(--color-primary-dim)]">
+                      <img src="/daena-logo.png" alt="Daena" className="w-full h-full object-cover" />
+                    </div>
                   </motion.div>
                   <div>
-                    <h2 className="text-2xl font-bold mb-2">All Set!</h2>
-                    <p className="text-[var(--color-text-secondary)] text-sm">
-                      Daena is ready with {Object.values(agentStates).filter(Boolean).length} agents and 20 AI models
-                    </p>
+                    <h2 className="text-2xl font-extrabold mb-2">Daena is Ready</h2>
+                    <p className="text-sm text-[var(--color-text-secondary)]">Your autonomous AI command center is configured.</p>
                   </div>
-                  <div className="glass-sm p-4 text-left space-y-2">
-                    <SummaryRow label="Company" value={companyName || "Personal"} />
-                    <SummaryRow label="Industry" value={industry || "General"} />
-                    <SummaryRow label="Language" value={LANGUAGES.find((l) => l.code === settings.language)?.name || "English"} />
-                    <SummaryRow label="Primary Brain" value={claudeProAvailable ? "Claude Opus 4.6" : "Qwen 3.6 Plus (free)"} />
-                    <SummaryRow label="Active Agents" value={`${Object.values(agentStates).filter(Boolean).length}/8`} />
-                    <SummaryRow label="AI Models" value="13 Free + 7 Paid cascade" />
-                    <SummaryRow label="OpenRouter" value={apiKey ? "✓ Connected" : "Not configured"} />
+
+                  <div className="glass-sm p-4 text-left max-w-sm mx-auto space-y-2">
+                    <SummaryRow label="Company" value={companyName || "—"} />
+                    <SummaryRow label="Language" value={LANGUAGES.find(l => l.code === settings.language)?.name || "English"} />
+                    <SummaryRow label="API" value={apiKey ? "OpenRouter ✓" : claudeDetected ? "Claude Pro ✓" : "—"} />
+                    <SummaryRow label="Agents" value={`${Object.values(agentStates).filter(Boolean).length} / 8 active`} />
+                    <SummaryRow label="Models" value="20 models (13 free)" />
                   </div>
+
+                  <p className="text-xs text-[var(--color-text-tertiary)]">
+                    You can update everything later in Settings.
+                  </p>
                 </div>
               )}
             </motion.div>
           </AnimatePresence>
         </div>
 
-        {/* Footer */}
+        {/* Navigation */}
         <div className="flex items-center justify-between px-8 pb-6">
-          <button onClick={() => setStep((s) => Math.max(0, s - 1))} className={`btn-ghost ${step === 0 ? "invisible" : ""}`}>
-            <ChevronLeft size={14} /> {t("setup.prev") || "Back"}
+          <button
+            onClick={() => setStep(s => s - 1)}
+            disabled={step === 0}
+            className="btn-ghost disabled:opacity-0"
+          >
+            <ChevronLeft size={14} /> Back
           </button>
           <button onClick={handleNext} disabled={!canNext()} className="btn-primary">
-            {step === 6 ? (t("setup.complete") || "Launch Daena") + " 🔥" : (t("setup.next") || "Continue")} {step < 6 && <ChevronRight size={14} />}
+            {step === 4 ? "Launch Daena 🔥" : "Continue"} {step < 4 && <ChevronRight size={14} />}
           </button>
         </div>
       </motion.div>
@@ -534,31 +518,13 @@ export function SetupWizard() {
   );
 }
 
-function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={(e) => { e.stopPropagation(); onChange(!checked); }}
-      className={`relative w-10 h-5.5 rounded-full transition-colors ${
-        checked ? "bg-[var(--color-primary)]" : "bg-[var(--color-surface-active)]"
-      }`}
-      style={{ minWidth: 40, height: 22 }}
-    >
-      <div
-        className="absolute top-0.5 w-4.5 h-4.5 rounded-full bg-white shadow transition-transform"
-        style={{
-          width: 18, height: 18,
-          transform: checked ? "translateX(20px)" : "translateX(2px)",
-        }}
-      />
-    </button>
-  );
-}
-
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between text-xs">
       <span className="text-[var(--color-text-tertiary)]">{label}</span>
-      <span className="text-[var(--color-text-primary)] font-medium">{value}</span>
+      <span className="font-semibold">{value}</span>
     </div>
   );
 }
+
+function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }

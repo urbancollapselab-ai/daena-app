@@ -1,10 +1,10 @@
 import { useAppStore } from "@/stores/appStore";
-import { Wifi, WifiOff, Zap, Clock } from "lucide-react";
+import { Wifi, WifiOff, Zap, Clock, Shield, Activity, Radio } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getHealth } from "@/lib/api";
 
 export function TopBar() {
-  const { systemStatus, setSystemStatus, settings, currentPage } = useAppStore();
+  const { systemStatus, setSystemStatus, currentPage } = useAppStore();
   const [backendOnline, setBackendOnline] = useState(false);
   const [time, setTime] = useState(new Date());
 
@@ -19,7 +19,7 @@ export function TopBar() {
       if (health) {
         setBackendOnline(true);
         setSystemStatus({
-          agentsActive: health.agents.filter((a) => a.status !== "idle").length,
+          agentsActive: health.agents.filter((a: any) => a.status !== "idle").length,
           agentsTotal: health.agents.length,
           modelsAvailable: health.pool.available_workers,
           modelsTotal: health.pool.total_workers,
@@ -37,60 +37,69 @@ export function TopBar() {
     return () => clearInterval(interval);
   }, []);
 
-  const pageTitle = {
-    chat: "Chat",
-    dashboard: "Dashboard",
-    agents: "Agent Management",
-    settings: "Settings",
-  }[currentPage];
+  const pageTitles: Record<string, { title: string; subtitle: string }> = {
+    chat: { title: "Chat", subtitle: "Talk to your AI agents" },
+    dashboard: { title: "Dashboard", subtitle: "System overview" },
+    agents: { title: "Agent Control", subtitle: "Monitor & manage departments" },
+    settings: { title: "Settings", subtitle: "Configure your system" },
+  };
+  const page = pageTitles[currentPage] || { title: "Daena", subtitle: "" };
 
   return (
-    <header className="h-12 flex items-center justify-between px-5 border-b border-[var(--color-border)] bg-[var(--color-bg-card)]/50 backdrop-blur-sm z-20 relative">
+    <header className="h-13 flex items-center justify-between px-5 border-b border-[var(--color-border)] bg-[var(--color-bg-card)]/40 backdrop-blur-xl z-20 relative">
       <div className="flex items-center gap-3">
-        <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">{pageTitle}</h1>
+        <div>
+          <h1 className="text-sm font-bold text-[var(--color-text-primary)] leading-tight">{page.title}</h1>
+          <p className="text-[0.5625rem] text-[var(--color-text-tertiary)] leading-tight">{page.subtitle}</p>
+        </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        {/* Status pills  */}
-        <div className="flex items-center gap-2">
-          <StatusPill
-            icon={backendOnline ? Wifi : WifiOff}
-            label={backendOnline ? "Online" : "Offline"}
-            variant={backendOnline ? "green" : "red"}
-          />
-          {systemStatus && (
-            <>
-              <StatusPill
-                icon={Zap}
-                label={`${systemStatus.modelsAvailable}/${systemStatus.modelsTotal} Models`}
-                variant="blue"
-              />
-              <StatusPill
-                icon={Clock}
-                label={time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                variant="dim"
-              />
-            </>
-          )}
+      <div className="flex items-center gap-2">
+        <StatusPill
+          icon={backendOnline ? Wifi : WifiOff}
+          label={backendOnline ? "Online" : "Offline"}
+          variant={backendOnline ? "green" : "red"}
+          pulse={backendOnline}
+        />
+        {systemStatus && (
+          <>
+            <StatusPill
+              icon={Shield}
+              label={`${systemStatus.agentsActive} Agents`}
+              variant="blue"
+            />
+            <StatusPill
+              icon={Zap}
+              label={`${systemStatus.modelsAvailable} Models`}
+              variant="accent"
+            />
+          </>
+        )}
+        <div className="w-px h-5 bg-[var(--color-border)] mx-1" />
+        <div className="flex items-center gap-1.5 text-[0.6875rem] text-[var(--color-text-tertiary)] font-mono">
+          <Clock size={11} />
+          {time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
         </div>
       </div>
     </header>
   );
 }
 
-function StatusPill({ icon: Icon, label, variant }: {
+function StatusPill({ icon: Icon, label, variant, pulse }: {
   icon: any; label: string;
-  variant: "green" | "blue" | "red" | "dim";
+  variant: "green" | "blue" | "red" | "accent";
+  pulse?: boolean;
 }) {
-  const colors = {
-    green: "text-[var(--color-accent)] bg-[var(--color-accent-dim)]",
-    blue: "text-[var(--color-primary)] bg-[var(--color-primary-dim)]",
-    red: "text-[var(--color-error)] bg-[var(--color-error-dim)]",
-    dim: "text-[var(--color-text-tertiary)] bg-[var(--color-surface)]",
+  const styles = {
+    green: "text-[var(--color-accent)] bg-[var(--color-accent-dim)] border-[var(--color-accent-dim)]",
+    blue: "text-[var(--color-primary)] bg-[var(--color-primary-dim)] border-[var(--color-primary-dim)]",
+    red: "text-[var(--color-error)] bg-[var(--color-error-dim)] border-[var(--color-error-dim)]",
+    accent: "text-[var(--color-gold)] bg-[var(--color-gold-dim)] border-[var(--color-gold-dim)]",
   };
   return (
-    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[0.6875rem] font-medium ${colors[variant]}`}>
-      <Icon size={12} />
+    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[0.625rem] font-semibold border ${styles[variant]}`}>
+      {pulse && <div className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />}
+      <Icon size={11} />
       <span>{label}</span>
     </div>
   );

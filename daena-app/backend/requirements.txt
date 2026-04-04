@@ -1,0 +1,3 @@
+# Daena Backend Requirements
+# These are auto-installed by the bootstrapper during setup
+httpx>=0.24.0

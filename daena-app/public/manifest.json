@@ -1,0 +1,13 @@
+{
+  "name": "Daena",
+  "short_name": "Daena",
+  "description": "Autonomous AI Command Center — 8 agents, 20 models, zero config",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#060810",
+  "theme_color": "#6C63FF",
+  "orientation": "any",
+  "icons": [
+    { "src": "/daena-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

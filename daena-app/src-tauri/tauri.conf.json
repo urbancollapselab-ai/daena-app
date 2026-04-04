@@ -57,7 +57,10 @@
       "../backend/agents/watchdog/CLAUDE.md": "backend/agents/watchdog/CLAUDE.md",
       "../backend/agents/heartbeat/CLAUDE.md": "backend/agents/heartbeat/CLAUDE.md",
       "../backend/agents/coordinator/CLAUDE.md": "backend/agents/coordinator/CLAUDE.md",
-      "../backend/.env.example": "backend/.env.example"
+      "../backend/.env.example": "backend/.env.example",
+      "../backend/requirements.txt": "backend/requirements.txt",
+      "../backend/scripts/bootstrap.sh": "backend/scripts/bootstrap.sh",
+      "../backend/scripts/bootstrap.ps1": "backend/scripts/bootstrap.ps1"
     },
     "macOS": {
       "minimumSystemVersion": "10.15",
