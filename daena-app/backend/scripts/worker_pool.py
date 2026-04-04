@@ -26,37 +26,35 @@ from typing import Optional, Dict
 ROOT = Path(__file__).parent.parent
 ENV_FILE = ROOT / ".env"
 
-# ── MODEL TIERS ──────────────────────────────────────────────────────
+# ── MODEL TIERS (Verified against OpenRouter — April 2026) ───────────
+# Tier 0: Primary free brain (1M context window)
 TIER_0 = [
-    "qwen/qwen3.6-plus:free",
+    "qwen/qwen3.6-plus:free",                 # Verified ✅
 ]
 
+# Tier 1: Strong free models (high capability)
 TIER_1 = [
-    "meta-llama/llama-4-maverick:free",
-    "qwen/qwen3-coder:free",
-    "mistralai/devstral-2512:free",
-    "deepseek/deepseek-r1:free",
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "openai/gpt-oss-120b:free",
-    "qwen/qwen3-next-80b-a3b-instruct:free",
+    "meta-llama/llama-4-maverick:free",        # Verified ✅
+    "deepseek/deepseek-r1:free",               # Verified ✅
+    "nvidia/nemotron-3-super-120b-a12b:free",  # Verified ✅
+    "openai/gpt-oss-120b:free",                # Verified ✅ (free variant)
+    "mistralai/devstral-2512:free",            # Verified ✅
 ]
 
+# Tier 2: Light free models (fast, lower capability)
 TIER_2 = [
-    "meta-llama/llama-4-scout:free",
-    "minimax/minimax-m2.5:free",
-    "google/gemma-3-27b-it:free",
-    "stepfun/step-3.5-mini:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
+    "meta-llama/llama-4-scout:free",           # Verified ✅
+    "google/gemma-3-27b-it:free",              # Verified ✅
+    "nvidia/nemotron-3-nano-30b-a3b:free",     # Verified ✅ (replaced Step 3.5)
+    "meta-llama/llama-3.3-70b-instruct:free",  # Verified ✅
 ]
 
+# Tier 3: Paid models (last resort, sorted by price)
 TIER_3 = [
-    "openai/gpt-oss-120b",          # $0.04/M
-    "google/gemini-2.5-flash-lite-preview",  # $0.10/M
-    "google/gemma-4-31b-it",         # $0.14/M
-    "openai/gpt-4o-mini",            # $0.15/M
-    "google/gemini-3.1-flash-lite-preview",  # $0.25/M
-    "deepseek/deepseek-v3.2",        # $0.26/M
-    "anthropic/claude-3.5-haiku",    # $0.80/M
+    "google/gemma-4-31b-it",                   # ~$0.14/M
+    "openai/gpt-4o-mini",                      # ~$0.15/M
+    "deepseek/deepseek-v3.2",                  # ~$0.26/M
+    "anthropic/claude-3.5-haiku",              # ~$0.80/M
 ]
 
 ALL_WORKERS = TIER_0 + TIER_1 + TIER_2 + TIER_3

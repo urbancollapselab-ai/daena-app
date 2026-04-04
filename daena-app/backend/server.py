@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 """
-Daena Backend Server v1.0
+Daena Backend Server v2.0
 =========================
-FastAPI server that bridges the React frontend with the Python AI backend.
+HTTP server bridging the React frontend with the Python AI backend.
 Runs on port 8910.
 
-Endpoints:
+Endpoints v2.0:
   POST /chat           — Send message, get AI response
   GET  /health         — System health check
   GET  /agents         — Agent status list
   POST /settings       — Update settings
   POST /test-key       — Validate OpenRouter API key
-  GET  /check-claude    — Detect Claude Code / Pro
-  POST /install-claude  — Install Claude Code CLI
+  GET  /check-claude   — Detect Claude Code / Pro
+  POST /install-claude — Install Claude Code CLI
+  GET  /traces         — Agent action traces (v2.0)
+  GET  /traces/stats   — Agent/model statistics (v2.0)
+  POST /execute        — Safe command execution (v2.0)
+  GET  /memory/stats   — Memory system statistics (v2.0)
+  GET  /schedules      — Scheduled tasks (v2.0)
+  GET  /tasks          — Task chains status (v2.0)
 """
 
 import json
@@ -31,12 +37,20 @@ sys.path.insert(0, str(ROOT))
 from scripts.worker_pool import WorkerPool
 from scripts.orchestrator import Orchestrator
 from scripts.memory_manager import MemoryManager
+from scripts.trace_logger import TraceLogger
+from scripts.safety_guard import SafetyGuard
+from scripts.scheduler import DaenaScheduler
+from scripts.task_runner import TaskRunner
 
-# ── State ─────────────────────────────────────────
+# ── State ─────────────────────────────────────────────
 START_TIME = time.time()
 pool = WorkerPool()
 orchestrator = Orchestrator()
 memory = MemoryManager()
+tracer = TraceLogger()
+guard = SafetyGuard()
+scheduler = DaenaScheduler()
+task_runner = TaskRunner()
 
 SETTINGS_FILE = ROOT / "config" / "settings.json"
 
@@ -146,9 +160,11 @@ class DaenaHandler(BaseHTTPRequestHandler):
             health_report = pool.get_health_report()
             self._json_response({
                 "status": "ok",
+                "version": "2.0",
                 "agents": AGENT_META,
                 "pool": health_report,
                 "uptime_hours": round(uptime_hours, 2),
+                "memory": memory.get_stats(),
             })
 
         elif path == "/agents":
@@ -159,6 +175,30 @@ class DaenaHandler(BaseHTTPRequestHandler):
 
         elif path == "/check-claude":
             self._json_response(check_claude_code())
+
+        # ── v2.0 Endpoints ────────────────────────────────────
+        elif path == "/traces":
+            traces = tracer.get_recent(limit=50)
+            self._json_response(traces)
+
+        elif path == "/traces/stats":
+            stats = tracer.get_stats()
+            cost = tracer.get_cost_report()
+            stats["cost"] = cost
+            self._json_response(stats)
+
+        elif path == "/memory/stats":
+            self._json_response(memory.get_stats())
+
+        elif path == "/schedules":
+            self._json_response({
+                "schedules": scheduler.get_schedules(),
+                "upcoming": scheduler.get_next_runs(),
+                "recent_log": scheduler.get_log(limit=10),
+            })
+
+        elif path == "/tasks":
+            self._json_response(task_runner.get_all_tasks(limit=20))
 
         else:
             dist_dir = ROOT / "dist"

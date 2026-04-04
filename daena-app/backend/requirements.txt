@@ -1,3 +1,13 @@
-# Daena Backend Requirements
-# These are auto-installed by the bootstrapper during setup
-httpx>=0.24.0
+# Daena v2.0 Dependencies
+# Core (zero-dependency for basic operation)
+# All stdlib modules used: http.server, json, sqlite3, sched, threading
+
+# MCP Protocol Support (optional but recommended)
+mcp[cli]>=1.0
+
+# Semantic Vector Memory (optional — falls back to FTS5 keyword search)
+sentence-transformers>=3.0
+
+# Note: sentence-transformers pulls in torch (~2GB).
+# For lighter installation, skip this and use FTS5 fallback:
+#   pip install mcp[cli]
