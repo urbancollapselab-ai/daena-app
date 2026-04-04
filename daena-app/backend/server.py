@@ -46,6 +46,13 @@ from scripts.output_guard import OutputGuard
 from scripts.pii_filter import PIIFilter
 from scripts.tool_selector import ToolSelector
 from scripts.db_utils import ensure_wal_mode
+from scripts.eval_judge import EvalJudge
+from scripts.smart_router import SmartRouter
+from scripts.graph_memory import GraphMemory
+from scripts.approval_queue import ApprovalQueue
+from scripts.config_versioner import ConfigVersioner
+from scripts.dag_planner import DAGPlanner
+from scripts.otel_exporter import OTelExporter
 
 # ── State ─────────────────────────────────────────────
 START_TIME = time.time()
@@ -60,6 +67,13 @@ input_sanitizer = InputSanitizer()
 output_guard = OutputGuard()
 pii_filter = PIIFilter()
 tool_selector = ToolSelector()
+eval_judge = EvalJudge()
+smart_router = SmartRouter(pool)
+graph_memory = GraphMemory()
+approval_queue = ApprovalQueue()
+config_versioner = ConfigVersioner()
+dag_planner = DAGPlanner()
+otel_exporter = OTelExporter()
 
 # Apply WAL mode on startup for Daena SQLite DBs
 try:
@@ -159,6 +173,11 @@ def handle_chat(message: str, agent: str = None) -> dict:
              
         memory.add_hot("assistant", response)
         
+        # ── v3.0 OTel & EVAL (Background task simulation) ──
+        otel_exporter.export_trace(agent, latency_ms, result.get("tokens_used", 0), error=False)
+        # Background eval could be threaded; running inline for demonstration
+        judge_score = eval_judge.evaluate_response(safe_message, response, agent)
+        
         return {
             "success": True,
             "response": response,
@@ -166,6 +185,7 @@ def handle_chat(message: str, agent: str = None) -> dict:
             "latency_ms": latency_ms,
             "agent": agent,
             "tokens": result.get("tokens_used"),
+            "eval_score": judge_score.get("overall", 0),
         }
     else:
         error_msg = result.get("error", "Unknown error")
