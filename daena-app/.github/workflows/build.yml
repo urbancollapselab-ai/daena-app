@@ -1,9 +1,13 @@
-name: Build & Release Daena
+name: Release Daena Apps
 
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: daena-app
 
 jobs:
   build-desktop:
@@ -29,14 +33,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
@@ -54,33 +54,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          projectPath: daena-app
           tagName: v__VERSION__
           releaseName: Daena v__VERSION__
-          releaseBody: 'Download the installer for your platform.'
-          releaseDraft: true
+          releaseBody: 'See the attached assets for your operating system.'
+          releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
-
-  build-ios:
-    runs-on: macos-latest
-    name: Mobile — iOS
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-ios
-      - run: npm install
-      - run: cargo install tauri-cli --version "^2.0"
-      - run: cargo tauri ios init
-      - run: cargo tauri ios build
-        continue-on-error: true
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ios-build
-          path: src-tauri/gen/apple/build/
 
   build-android:
     runs-on: ubuntu-latest
@@ -92,19 +72,27 @@ jobs:
           node-version: 20
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-      - run: npm install
-      - run: cargo install tauri-cli --version "^2.0"
-      - run: cargo tauri android init
-      - run: cargo tauri android build
+      - name: Install Android NDK
+        run: sdkmanager "ndk;27.0.12077973"
+      - name: Install frontend deps
+        run: npm install
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0"
+      - name: Init Android project
+        run: cargo tauri android init
+      - name: Build Android APK
+        run: cargo tauri android build
         continue-on-error: true
+        env:
+          NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.0.12077973
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: src-tauri/gen/android/app/build/outputs/apk/
+          path: daena-app/src-tauri/gen/android/app/build/outputs/apk/

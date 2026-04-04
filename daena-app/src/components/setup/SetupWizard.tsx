@@ -1,20 +1,22 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Globe, Key, Bot, Rocket, ChevronRight, ChevronLeft,
   Eye, EyeOff, Loader2, CheckCircle2, XCircle, AlertTriangle,
-  Cpu, Shield, Terminal, Download, Zap, Building2
+  Cpu, Shield, Download, Sparkles, Brain, Layers,
+  Terminal, Users, Zap, BarChart3, MessageSquare
 } from "lucide-react";
 import { useTranslation } from "@/i18n";
 
 /* ── Step definitions ─────────────────────────────── */
 const STEPS = [
-  { id: "welcome",  title: "Welcome",      sub: "Language" },
-  { id: "install",  title: "System Setup",  sub: "Auto-install" },
-  { id: "connect",  title: "Connect",       sub: "API Keys" },
-  { id: "team",     title: "Your Team",     sub: "Agents" },
-  { id: "ready",    title: "Ready!",        sub: "Launch" },
+  { id: "welcome",   title: "Welcome",       sub: "Language" },
+  { id: "showcase",  title: "Discover",      sub: "Features" },
+  { id: "install",   title: "System Setup",  sub: "Auto-install" },
+  { id: "connect",   title: "Connect",       sub: "API Keys" },
+  { id: "team",      title: "Your Team",     sub: "Agents" },
+  { id: "ready",     title: "Ready!",        sub: "Launch" },
 ];
 
 const LANGUAGES = [
@@ -27,6 +29,66 @@ const LANGUAGES = [
 const INDUSTRIES = [
   "Technology", "Construction", "Finance", "Healthcare", "E-commerce",
   "Education", "Marketing", "Real Estate", "Consulting", "Other",
+];
+
+/* ── Showcase slide data ─────────────────────────── */
+const SHOWCASE_SLIDES = [
+  {
+    id: "brain",
+    icon: Brain,
+    gradient: "from-purple-500 to-indigo-600",
+    title: "Autonomous AI Brain",
+    subtitle: "Claude Opus 4.6 + 20 Model Cascade",
+    features: [
+      "Self-thinking main brain that orchestrates everything",
+      "20 AI models from FREE to premium tier",
+      "Automatic model selection for cost optimization",
+      "Zero manual intervention — fully autonomous",
+    ],
+  },
+  {
+    id: "agents",
+    icon: Users,
+    gradient: "from-emerald-500 to-teal-600",
+    title: "8 Specialized AI Agents",
+    subtitle: "Your personal AI workforce",
+    features: [
+      "💰 Finance — Invoicing, budgets, expense tracking",
+      "📊 Data — Lead enrichment, CRM, data collection",
+      "📣 Marketing — Content, campaigns, social media",
+      "🎯 Sales — Outreach, proposals, deal management",
+      "🔬 Research — Market analysis, competitor tracking",
+      "🛡️ Watchdog — System health monitoring 24/7",
+      "💓 Heartbeat — Uptime tracking, scheduled reports",
+      "🎭 Coordinator — Inter-agent task routing",
+    ],
+  },
+  {
+    id: "control",
+    icon: BarChart3,
+    gradient: "from-amber-500 to-orange-600",
+    title: "Real-time Command Center",
+    subtitle: "Full control over your AI operations",
+    features: [
+      "Live dashboard with system metrics & KPIs",
+      "Per-agent monitoring with activity sparklines",
+      "Model cascade visualization (T0 → T3 tiers)",
+      "Request volume tracking & cost analysis",
+    ],
+  },
+  {
+    id: "platform",
+    icon: Layers,
+    gradient: "from-rose-500 to-pink-600",
+    title: "Works Everywhere",
+    subtitle: "Desktop + Mobile — One system",
+    features: [
+      "🖥️ macOS & Windows native desktop app",
+      "📱 Mobile access via QR code (iOS & Android)",
+      "🌐 Coworking mode — share access securely",
+      "🔒 Local-first — your data stays on your machine",
+    ],
+  },
 ];
 
 /* ── Interfaces ───────────────────────────────────── */
@@ -42,6 +104,7 @@ export function SetupWizard() {
   const { t } = useTranslation();
 
   const [step, setStep] = useState(0);
+  const [slideIdx, setSlideIdx] = useState(0);
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -57,7 +120,6 @@ export function SetupWizard() {
     research: true, watchdog: true, heartbeat: true, coordinator: true,
   });
 
-  // Dependency checks for Step 2
   const [deps, setDeps] = useState<DepCheck[]>([
     { name: "Python 3",              status: "pending", detail: "Required for AI backend" },
     { name: "Node.js",               status: "pending", detail: "Required for app runtime" },
@@ -66,9 +128,17 @@ export function SetupWizard() {
     { name: "Backend Server",        status: "pending", detail: "Local AI server on port 8910" },
   ]);
 
-  /* ── Auto-scan when reaching step 1 ───────────── */
+  // Auto-advance showcase slides
   useEffect(() => {
-    if (step === 1 && deps[0].status === "pending") {
+    if (step !== 1) return;
+    const timer = setInterval(() => {
+      setSlideIdx(prev => (prev + 1) % SHOWCASE_SLIDES.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [step]);
+
+  useEffect(() => {
+    if (step === 2 && deps[0].status === "pending") {
       runFullScan();
     }
   }, [step]);
@@ -78,15 +148,10 @@ export function SetupWizard() {
   };
 
   const runFullScan = async () => {
-    // Mark all as checking
     setDeps(prev => prev.map(d => ({ ...d, status: "checking" as const })));
     await sleep(400);
-
-    // Node.js — we're running, so yes
     updateDep(1, { status: "ok", detail: "Node.js is running (this app)" });
     await sleep(200);
-
-    // Python + Backend
     try {
       const res = await fetch("http://127.0.0.1:8910/health", { signal: AbortSignal.timeout(3000) });
       if (res.ok) {
@@ -98,8 +163,6 @@ export function SetupWizard() {
       updateDep(4, { status: "missing", detail: "Backend not running yet" });
     }
     await sleep(200);
-
-    // Claude Code
     try {
       const res = await fetch("http://127.0.0.1:8910/check-claude", { signal: AbortSignal.timeout(5000) });
       const data = await res.json();
@@ -113,8 +176,6 @@ export function SetupWizard() {
       updateDep(2, { status: "optional", detail: "Not detected — optional upgrade" });
     }
     await sleep(200);
-
-    // OpenRouter
     try {
       const res = await fetch("https://openrouter.ai/api/v1/models", { signal: AbortSignal.timeout(5000) });
       updateDep(3, { status: res.ok ? "ok" : "missing", detail: res.ok ? "API reachable ✓" : "Cannot reach API" });
@@ -126,13 +187,10 @@ export function SetupWizard() {
   const runAutoInstall = async () => {
     setInstalling(true);
     const missing = deps.filter(d => d.status === "missing" || d.status === "optional");
-
     for (const dep of missing) {
       const idx = deps.findIndex(d => d.name === dep.name);
       updateDep(idx, { status: "installing", detail: "Installing..." });
       await sleep(800);
-
-      // Try Tauri command
       try {
         const { invoke } = await import("@tauri-apps/api/core");
         if (dep.name.includes("Claude")) {
@@ -140,13 +198,11 @@ export function SetupWizard() {
           if (res.success) {
             updateDep(idx, { status: "ok", detail: "Installed ✓" });
             setClaudeDetected(true);
-            // Set permissions so Claude doesn't ask again
             try { await invoke("install_dependencies"); } catch {}
           } else {
             updateDep(idx, { status: "optional", detail: "Skipped — install manually later" });
           }
         } else if (dep.name.includes("Backend")) {
-          // Backend will be started by Tauri automatically
           updateDep(idx, { status: "ok", detail: "Will start with app" });
         } else {
           const res: any = await invoke("install_dependencies");
@@ -156,31 +212,27 @@ export function SetupWizard() {
         updateDep(idx, { status: "optional", detail: "Skipped — non-critical" });
       }
     }
-
     setInstalling(false);
     setInstallDone(true);
   };
 
   const canNext = () => {
     if (step === 0) return true;
-    if (step === 1) return true;
-    if (step === 2) return apiKey.length > 10 || claudeDetected;
-    if (step === 3) return companyName.length > 0;
+    if (step === 1) return true; // showcase
+    if (step === 2) return true; // system check
+    if (step === 3) return apiKey.length > 10 || claudeDetected;
+    if (step === 4) return companyName.length > 0;
     return true;
   };
 
   const handleNext = () => {
-    if (step === 2) {
-      updateSettings({
-        openrouterKey: apiKey,
-        anthropicKey,
-        claudePath: claudeDetected ? "/opt/homebrew/bin/claude" : undefined,
-      });
-    }
     if (step === 3) {
-      updateSettings({ companyName, industry, agentsEnabled: agentStates });
+      updateSettings({ openrouterKey: apiKey, anthropicKey, claudePath: claudeDetected ? "/opt/homebrew/bin/claude" : undefined });
     }
     if (step === 4) {
+      updateSettings({ companyName, industry, agentsEnabled: agentStates });
+    }
+    if (step === 5) {
       addConversation();
       setSetupComplete(true);
       return;
@@ -191,17 +243,12 @@ export function SetupWizard() {
   const testApiKey = async () => {
     setTesting(true);
     try {
-      const res = await fetch("https://openrouter.ai/api/v1/models", {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
+      const res = await fetch("https://openrouter.ai/api/v1/models", { headers: { Authorization: `Bearer ${apiKey}` } });
       setKeyValid(res.ok);
-    } catch {
-      setKeyValid(false);
-    }
+    } catch { setKeyValid(false); }
     setTesting(false);
   };
 
-  const allOk = deps.every(d => d.status === "ok" || d.status === "optional");
   const hasMissing = deps.some(d => d.status === "missing" || d.status === "optional");
 
   const AGENT_LIST = [
@@ -214,6 +261,8 @@ export function SetupWizard() {
     { id: "heartbeat",   icon: "💓", name: "Heartbeat",   desc: "Uptime & scheduled reports" },
     { id: "coordinator", icon: "🎭", name: "Coordinator", desc: "Inter-agent task routing" },
   ];
+
+  const currentSlide = SHOWCASE_SLIDES[slideIdx];
 
   return (
     <div className="fixed inset-0 bg-[var(--color-bg-deep)] flex items-center justify-center overflow-hidden">
@@ -234,7 +283,7 @@ export function SetupWizard() {
         </div>
 
         {/* Content */}
-        <div className="px-8 py-6 min-h-[400px]">
+        <div className="px-8 py-6 min-h-[440px]">
           <AnimatePresence mode="wait">
             <motion.div
               key={step}
@@ -271,15 +320,94 @@ export function SetupWizard() {
                 </div>
               )}
 
-              {/* ═══════════ STEP 1: System Scan & Auto-Install ═══════════ */}
+              {/* ═══════════ STEP 1: Feature Showcase ═══════════ */}
               {step === 1 && (
-                <div className="space-y-4">
-                  <div className="text-center mb-4">
-                    <Cpu size={36} className="mx-auto mb-2 text-[var(--color-primary)]" />
-                    <h2 className="text-xl font-extrabold">System Setup</h2>
-                    <p className="text-sm text-[var(--color-text-secondary)]">Scanning your system & auto-installing dependencies</p>
+                <div className="space-y-5">
+                  <div className="text-center">
+                    <Sparkles size={20} className="mx-auto mb-2 text-[var(--color-gold)]" />
+                    <h2 className="text-xl font-extrabold">What You're Installing</h2>
+                    <p className="text-xs text-[var(--color-text-tertiary)]">Swipe through to see what Daena can do</p>
                   </div>
 
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={slideIdx}
+                      initial={{ opacity: 0, x: 40 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -40 }}
+                      transition={{ duration: 0.35 }}
+                      className="glass-sm p-5 relative overflow-hidden"
+                    >
+                      {/* Gradient accent */}
+                      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${currentSlide.gradient}`} />
+
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${currentSlide.gradient} flex items-center justify-center`}>
+                          <currentSlide.icon size={20} className="text-white" />
+                        </div>
+                        <div>
+                          <h3 className="text-base font-bold">{currentSlide.title}</h3>
+                          <p className="text-xs text-[var(--color-text-tertiary)]">{currentSlide.subtitle}</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        {currentSlide.features.map((feat, i) => (
+                          <motion.div
+                            key={i}
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: i * 0.06 }}
+                            className="flex items-start gap-2 text-sm"
+                          >
+                            <CheckCircle2 size={14} className="text-[var(--color-accent)] mt-0.5 shrink-0" />
+                            <span className="text-[var(--color-text-secondary)]">{feat}</span>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  </AnimatePresence>
+
+                  {/* Slide indicators + nav */}
+                  <div className="flex items-center justify-center gap-2">
+                    {SHOWCASE_SLIDES.map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setSlideIdx(i)}
+                        className={`transition-all rounded-full ${
+                          i === slideIdx
+                            ? "w-6 h-2 bg-[var(--color-primary)]"
+                            : "w-2 h-2 bg-[var(--color-surface-active)] hover:bg-[var(--color-text-tertiary)]"
+                        }`}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Quick stat bar */}
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    {[
+                      { num: "8", label: "AI Agents" },
+                      { num: "20", label: "Models" },
+                      { num: "13", label: "Free Models" },
+                      { num: "4", label: "Languages" },
+                    ].map(stat => (
+                      <div key={stat.label} className="glass-sm py-2 px-1">
+                        <div className="text-base font-extrabold text-[var(--color-primary)]">{stat.num}</div>
+                        <div className="text-[0.5625rem] text-[var(--color-text-tertiary)]">{stat.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ═══════════ STEP 2: System Scan & Auto-Install ═══════════ */}
+              {step === 2 && (
+                <div className="space-y-4">
+                  <div className="text-center mb-3">
+                    <Cpu size={32} className="mx-auto mb-2 text-[var(--color-primary)]" />
+                    <h2 className="text-xl font-extrabold">System Setup</h2>
+                    <p className="text-sm text-[var(--color-text-secondary)]">Scanning & installing dependencies</p>
+                  </div>
                   <div className="space-y-2">
                     {deps.map((dep, i) => (
                       <motion.div
@@ -295,49 +423,40 @@ export function SetupWizard() {
                         {dep.status === "ok" && <CheckCircle2 size={16} className="text-[var(--color-accent)]" />}
                         {dep.status === "missing" && <XCircle size={16} className="text-[var(--color-error)]" />}
                         {dep.status === "optional" && <AlertTriangle size={16} className="text-[var(--color-warning)]" />}
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <div className="text-sm font-semibold">{dep.name}</div>
-                          <div className="text-xs text-[var(--color-text-tertiary)]">{dep.detail}</div>
+                          <div className="text-xs text-[var(--color-text-tertiary)] truncate">{dep.detail}</div>
                         </div>
-                        {dep.status === "ok" && <span className="badge badge-green">Ready</span>}
-                        {dep.status === "installing" && <span className="badge badge-gold">Installing</span>}
-                        {dep.status === "missing" && <span className="badge badge-red">Missing</span>}
-                        {dep.status === "optional" && <span className="badge badge-amber">Optional</span>}
+                        {dep.status === "ok" && <span className="badge badge-green text-[0.625rem]">Ready</span>}
+                        {dep.status === "installing" && <span className="badge badge-gold text-[0.625rem]">Installing</span>}
+                        {dep.status === "missing" && <span className="badge badge-red text-[0.625rem]">Missing</span>}
+                        {dep.status === "optional" && <span className="badge badge-amber text-[0.625rem]">Optional</span>}
                       </motion.div>
                     ))}
                   </div>
-
-                  {/* Auto-install button */}
-                  {hasMissing && !installing && !installDone && allOk === false && (
+                  {hasMissing && !installing && !installDone && (
                     <button onClick={runAutoInstall} className="btn-primary py-2.5 text-sm w-full justify-center">
                       <Download size={16} /> Install All Missing Dependencies
                     </button>
                   )}
-
                   {installing && (
                     <div className="glass-sm p-3 flex items-center gap-3 border-[var(--color-gold)]/30">
                       <Loader2 size={16} className="animate-spin text-[var(--color-gold)]" />
                       <span className="text-sm text-[var(--color-gold)]">Installing... This may take a minute.</span>
                     </div>
                   )}
-
                   {claudeDetected && (
                     <div className="glass-sm p-3 border-[var(--color-accent)]/30 bg-[var(--color-accent-dim)]">
-                      <p className="text-xs text-[var(--color-accent)] font-semibold">
-                        🎉 Claude Pro detected! Opus 4.6 will be your primary brain.
-                      </p>
+                      <p className="text-xs text-[var(--color-accent)] font-semibold">🎉 Claude Pro detected! Opus 4.6 will be your primary brain.</p>
                     </div>
                   )}
-
-                  {/* Permissions notice */}
                   <div className="glass-sm p-3 border-[var(--color-warning)]/20 bg-[var(--color-warning)]/5">
                     <div className="flex items-start gap-2">
                       <Shield size={14} className="text-[var(--color-warning)] mt-0.5 shrink-0" />
                       <div>
-                        <p className="text-xs text-[var(--color-warning)] font-semibold mb-1">Autonomous Access</p>
-                        <p className="text-xs text-[var(--color-text-tertiary)]">
-                          Daena's agents need terminal & file system access to work autonomously. 
-                          These permissions are granted once during setup — no repeated prompts.
+                        <p className="text-xs text-[var(--color-warning)] font-semibold mb-0.5">Autonomous Access</p>
+                        <p className="text-[0.6875rem] text-[var(--color-text-tertiary)]">
+                          Daena needs terminal & file system access. Permissions are granted once — no repeated prompts.
                         </p>
                       </div>
                     </div>
@@ -345,89 +464,61 @@ export function SetupWizard() {
                 </div>
               )}
 
-              {/* ═══════════ STEP 2: API Connection ═══════════ */}
-              {step === 2 && (
+              {/* ═══════════ STEP 3: API Connection ═══════════ */}
+              {step === 3 && (
                 <div className="space-y-4">
-                  <div className="text-center mb-4">
-                    <Key size={36} className="mx-auto mb-2 text-[var(--color-accent)]" />
+                  <div className="text-center mb-3">
+                    <Key size={32} className="mx-auto mb-2 text-[var(--color-accent)]" />
                     <h2 className="text-xl font-extrabold">Connect Your AI</h2>
-                    <p className="text-sm text-[var(--color-text-secondary)]">Link your API keys to power the 20-model cascade</p>
+                    <p className="text-sm text-[var(--color-text-secondary)]">Power the 20-model cascade</p>
                   </div>
-
-                  {/* OpenRouter Key */}
                   <div>
                     <label className="text-xs font-semibold text-[var(--color-text-secondary)] mb-1.5 block">
                       OpenRouter API Key {!claudeDetected && <span className="text-[var(--color-error)]">*</span>}
                     </label>
                     <div className="relative">
-                      <input
-                        type={showKey ? "text" : "password"}
-                        value={apiKey}
-                        onChange={e => setApiKey(e.target.value)}
-                        placeholder="sk-or-v1-..."
-                        className="glass-input w-full px-4 py-3 pr-20 text-sm"
-                      />
+                      <input type={showKey ? "text" : "password"} value={apiKey}
+                        onChange={e => setApiKey(e.target.value)} placeholder="sk-or-v1-..."
+                        className="glass-input w-full px-4 py-3 pr-20 text-sm" />
                       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
                         <button onClick={() => setShowKey(!showKey)} className="p-1.5 hover:bg-white/5 rounded-lg">
                           {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
                         </button>
-                        <button
-                          onClick={testApiKey}
-                          disabled={apiKey.length < 10 || testing}
-                          className="px-2 py-1 text-xs font-semibold rounded-lg bg-[var(--color-primary-dim)] text-[var(--color-primary)] disabled:opacity-30"
-                        >
+                        <button onClick={testApiKey} disabled={apiKey.length < 10 || testing}
+                          className="px-2 py-1 text-xs font-semibold rounded-lg bg-[var(--color-primary-dim)] text-[var(--color-primary)] disabled:opacity-30">
                           {testing ? <Loader2 size={12} className="animate-spin" /> : "Test"}
                         </button>
                       </div>
                     </div>
-                    {keyValid === true && (
-                      <p className="text-xs text-[var(--color-accent)] mt-1.5 flex items-center gap-1">
-                        <CheckCircle2 size={12} /> Key valid — 20 models available
-                      </p>
-                    )}
-                    {keyValid === false && (
-                      <p className="text-xs text-[var(--color-error)] mt-1.5 flex items-center gap-1">
-                        <XCircle size={12} /> Invalid key. Check and try again.
-                      </p>
-                    )}
+                    {keyValid === true && <p className="text-xs text-[var(--color-accent)] mt-1.5 flex items-center gap-1"><CheckCircle2 size={12} /> Key valid — 20 models available</p>}
+                    {keyValid === false && <p className="text-xs text-[var(--color-error)] mt-1.5 flex items-center gap-1"><XCircle size={12} /> Invalid key</p>}
                     <p className="text-xs text-[var(--color-text-tertiary)] mt-1.5">
-                      Get a free key at <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" className="text-[var(--color-primary)] underline">openrouter.ai/keys</a>
+                      Free key at <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" className="text-[var(--color-primary)] underline">openrouter.ai/keys</a>
                     </p>
                   </div>
-
-                  {/* Anthropic Key (optional) */}
                   <div>
                     <label className="text-xs font-semibold text-[var(--color-text-secondary)] mb-1.5 block">
                       Anthropic API Key <span className="text-[var(--color-text-tertiary)]">(optional)</span>
                     </label>
-                    <input
-                      type="password"
-                      value={anthropicKey}
-                      onChange={e => setAnthropicKey(e.target.value)}
-                      placeholder="sk-ant-..."
-                      className="glass-input w-full px-4 py-3 text-sm"
-                    />
+                    <input type="password" value={anthropicKey} onChange={e => setAnthropicKey(e.target.value)}
+                      placeholder="sk-ant-..." className="glass-input w-full px-4 py-3 text-sm" />
                   </div>
-
                   {claudeDetected && (
                     <div className="glass-sm p-3 bg-[var(--color-accent-dim)] border-[var(--color-accent)]/30">
-                      <p className="text-xs text-[var(--color-accent)] font-semibold">
-                        ✓ Claude Code Pro detected — you can skip the API key if you want.
-                      </p>
+                      <p className="text-xs text-[var(--color-accent)] font-semibold">✓ Claude Code Pro detected — API key optional</p>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* ═══════════ STEP 3: Team Setup ═══════════ */}
-              {step === 3 && (
+              {/* ═══════════ STEP 4: Team Setup ═══════════ */}
+              {step === 4 && (
                 <div className="space-y-4">
-                  <div className="text-center mb-3">
-                    <Bot size={36} className="mx-auto mb-2 text-[var(--color-gold)]" />
+                  <div className="text-center mb-2">
+                    <Bot size={32} className="mx-auto mb-2 text-[var(--color-gold)]" />
                     <h2 className="text-xl font-extrabold">Build Your Team</h2>
-                    <p className="text-sm text-[var(--color-text-secondary)]">Tell us about you & choose your AI agents</p>
+                    <p className="text-sm text-[var(--color-text-secondary)]">About you & your AI agents</p>
                   </div>
-
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
                       <label className="text-xs font-semibold text-[var(--color-text-secondary)] mb-1 block">Company / Project *</label>
@@ -443,21 +534,18 @@ export function SetupWizard() {
                       </select>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-2 mt-2">
+                  <div className="grid grid-cols-2 gap-2 mt-1">
                     {AGENT_LIST.map(ag => (
-                      <button
-                        key={ag.id}
+                      <button key={ag.id}
                         onClick={() => setAgentStates(s => ({ ...s, [ag.id]: !s[ag.id] }))}
-                        className={`glass-sm glass-hover p-3 text-left transition-all ${
+                        className={`glass-sm glass-hover p-2.5 text-left transition-all ${
                           agentStates[ag.id] ? "!border-[var(--color-accent)]/40 bg-[var(--color-accent-dim)]" : "opacity-50"
-                        }`}
-                      >
+                        }`}>
                         <div className="flex items-center gap-2">
-                          <span className="text-lg">{ag.icon}</span>
+                          <span className="text-base">{ag.icon}</span>
                           <div>
                             <div className="text-xs font-semibold">{ag.name}</div>
-                            <div className="text-[0.625rem] text-[var(--color-text-tertiary)]">{ag.desc}</div>
+                            <div className="text-[0.5625rem] text-[var(--color-text-tertiary)]">{ag.desc}</div>
                           </div>
                         </div>
                       </button>
@@ -466,14 +554,11 @@ export function SetupWizard() {
                 </div>
               )}
 
-              {/* ═══════════ STEP 4: Ready ═══════════ */}
-              {step === 4 && (
+              {/* ═══════════ STEP 5: Ready ═══════════ */}
+              {step === 5 && (
                 <div className="space-y-6 text-center py-4">
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", stiffness: 200, damping: 15 }}
-                  >
+                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 200, damping: 15 }}>
                     <div className="w-24 h-24 rounded-3xl mx-auto overflow-hidden shadow-2xl shadow-[var(--color-primary-dim)]">
                       <img src="/daena-logo.png" alt="Daena" className="w-full h-full object-cover" />
                     </div>
@@ -482,18 +567,14 @@ export function SetupWizard() {
                     <h2 className="text-2xl font-extrabold mb-2">Daena is Ready</h2>
                     <p className="text-sm text-[var(--color-text-secondary)]">Your autonomous AI command center is configured.</p>
                   </div>
-
-                  <div className="glass-sm p-4 text-left max-w-sm mx-auto space-y-2">
+                  <div className="glass-sm p-4 text-left max-w-sm mx-auto space-y-2.5">
                     <SummaryRow label="Company" value={companyName || "—"} />
                     <SummaryRow label="Language" value={LANGUAGES.find(l => l.code === settings.language)?.name || "English"} />
                     <SummaryRow label="API" value={apiKey ? "OpenRouter ✓" : claudeDetected ? "Claude Pro ✓" : "—"} />
                     <SummaryRow label="Agents" value={`${Object.values(agentStates).filter(Boolean).length} / 8 active`} />
                     <SummaryRow label="Models" value="20 models (13 free)" />
                   </div>
-
-                  <p className="text-xs text-[var(--color-text-tertiary)]">
-                    You can update everything later in Settings.
-                  </p>
+                  <p className="text-xs text-[var(--color-text-tertiary)]">You can update everything later in Settings.</p>
                 </div>
               )}
             </motion.div>
@@ -502,15 +583,11 @@ export function SetupWizard() {
 
         {/* Navigation */}
         <div className="flex items-center justify-between px-8 pb-6">
-          <button
-            onClick={() => setStep(s => s - 1)}
-            disabled={step === 0}
-            className="btn-ghost disabled:opacity-0"
-          >
+          <button onClick={() => setStep(s => s - 1)} disabled={step === 0} className="btn-ghost disabled:opacity-0">
             <ChevronLeft size={14} /> Back
           </button>
           <button onClick={handleNext} disabled={!canNext()} className="btn-primary">
-            {step === 4 ? "Launch Daena 🔥" : "Continue"} {step < 4 && <ChevronRight size={14} />}
+            {step === 5 ? "Launch Daena 🔥" : step === 1 ? "I'm Ready — Let's Go" : "Continue"} {step < 5 && step !== 1 && <ChevronRight size={14} />}
           </button>
         </div>
       </motion.div>
