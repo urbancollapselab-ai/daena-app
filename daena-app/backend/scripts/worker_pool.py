@@ -163,7 +163,12 @@ class WorkerPool:
 
         messages = []
         if system:
-            messages.append({"role": "system", "content": system})
+            # Enable prompt caching for system prompt (Anthropic/OpenRouter standard)
+            if len(system) > 1000:
+                messages.append({"role": "system", "content": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]})
+            else:
+                messages.append({"role": "system", "content": system})
+                
         messages.append({"role": "user", "content": prompt})
 
         body = json.dumps({

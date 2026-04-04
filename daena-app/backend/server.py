@@ -41,6 +41,11 @@ from scripts.trace_logger import TraceLogger
 from scripts.safety_guard import SafetyGuard
 from scripts.scheduler import DaenaScheduler
 from scripts.task_runner import TaskRunner
+from scripts.input_sanitizer import InputSanitizer
+from scripts.output_guard import OutputGuard
+from scripts.pii_filter import PIIFilter
+from scripts.tool_selector import ToolSelector
+from scripts.db_utils import ensure_wal_mode
 
 # ── State ─────────────────────────────────────────────
 START_TIME = time.time()
@@ -51,6 +56,16 @@ tracer = TraceLogger()
 guard = SafetyGuard()
 scheduler = DaenaScheduler()
 task_runner = TaskRunner()
+input_sanitizer = InputSanitizer()
+output_guard = OutputGuard()
+pii_filter = PIIFilter()
+tool_selector = ToolSelector()
+
+# Apply WAL mode on startup for Daena SQLite DBs
+try:
+    ensure_wal_mode()
+except Exception:
+    pass
 
 SETTINGS_FILE = ROOT / "config" / "settings.json"
 
@@ -88,16 +103,39 @@ Be concise, helpful, and professional. Respond in the user's language."""
 
 def handle_chat(message: str, agent: str = None) -> dict:
     """Process a chat message through the brain cascade."""
-    memory.add_hot("user", message)
-    context = memory.get_context(task=message, agent=agent)
-    classification = orchestrator.classify_task(message)
+    # ── v3.0 INPUT SECURITY LAYER ──
+    # 1. PII Redaction
+    pii_res = pii_filter.check_and_redact(message)
+    safe_message = pii_res["redacted_text"]
+
+    # 2. Prompt Injection Check
+    sanitizer_res = input_sanitizer.check(safe_message)
+    if sanitizer_res["risk"] == "HIGH":
+        return {
+            "success": False,
+            "response": "🚫 BLOCKED: Potential prompt injection or malicious input detected.",
+            "model": "security_layer",
+            "latency_ms": 0,
+            "error": "prompt_injection",
+        }
+    safe_message = input_sanitizer.sanitize(safe_message)
+
+    memory.add_hot("user", safe_message)
+    context = memory.get_context(task=safe_message, agent=agent)
+
+    # 3. Semantic Tool Routing (Zero-LLM)
+    if not agent:
+        route = tool_selector.select(safe_message)
+        if not route["fallback"]:
+            agent = route["tool"]
+            
+    # Prepare Prompt
+    armored_system = input_sanitizer.armor_system_prompt(SYSTEM_PROMPT)
+    full_prompt = f"{armored_system}\n\n{context}\n\nUser: {safe_message}"
     
-    full_prompt = f"{SYSTEM_PROMPT}\n\n{context}\n\nUser: {message}"
-    
-    if classification["destination"] == "department":
-        dept = classification["department"]
-        dept_context = orchestrator.get_department_context(dept)
-        full_prompt = f"{SYSTEM_PROMPT}\n\n{dept_context}\n\n{context}\n\nUser: {message}"
+    if agent and agent != "main_brain":
+        dept_context = orchestrator.get_department_context(agent)
+        full_prompt = f"{armored_system}\n\n{dept_context}\n\n{context}\n\nUser: {safe_message}"
     
     t0 = time.time()
     result = pool.call(full_prompt, max_tokens=1000)
@@ -105,13 +143,28 @@ def handle_chat(message: str, agent: str = None) -> dict:
     
     if result.get("success"):
         response = result["response"]
+        
+        # ── v3.0 OUTPUT SECURITY LAYER ──
+        guard_res = output_guard.check_response(response)
+        if guard_res["action"] == "BLOCK":
+            return {
+                "success": False,
+                "response": "🚫 BLOCKED: Policy violation or sensitive data leak detected in agent response.",
+                "model": "security_layer",
+                "latency_ms": latency_ms,
+                "error": "output_policy_violation",
+            }
+        elif guard_res["action"] == "REDACT":
+             response = output_guard.redact_response(response)
+             
         memory.add_hot("assistant", response)
+        
         return {
             "success": True,
             "response": response,
             "model": result.get("model", "unknown"),
             "latency_ms": latency_ms,
-            "agent": agent or classification.get("department"),
+            "agent": agent,
             "tokens": result.get("tokens_used"),
         }
     else:
