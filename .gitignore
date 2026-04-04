@@ -1,0 +1,11 @@
+node_modules/
+target/
+dist/
+__pycache__/
+*.pyc
+.env
+*.sqlite
+.DS_Store
+Cargo.lock
+*.log
+daena-app/src-tauri/gen/

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
+  "productName": "Daena",
+  "version": "1.0.0",
+  "identifier": "com.daena.commandcenter",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Daena",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "decorations": true,
+        "transparent": false,
+        "center": true
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
+    },
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../backend/server.py": "backend/server.py",
+      "../backend/scripts/__init__.py": "backend/scripts/__init__.py",
+      "../backend/scripts/brain.py": "backend/scripts/brain.py",
+      "../backend/scripts/worker_pool.py": "backend/scripts/worker_pool.py",
+      "../backend/scripts/orchestrator.py": "backend/scripts/orchestrator.py",
+      "../backend/scripts/memory_manager.py": "backend/scripts/memory_manager.py",
+      "../backend/scripts/message_bus.py": "backend/scripts/message_bus.py",
+      "../backend/scripts/agent_triggers.py": "backend/scripts/agent_triggers.py",
+      "../backend/agents/finance/CLAUDE.md": "backend/agents/finance/CLAUDE.md",
+      "../backend/agents/data/CLAUDE.md": "backend/agents/data/CLAUDE.md",
+      "../backend/agents/marketing/CLAUDE.md": "backend/agents/marketing/CLAUDE.md",
+      "../backend/agents/sales/CLAUDE.md": "backend/agents/sales/CLAUDE.md",
+      "../backend/agents/research/CLAUDE.md": "backend/agents/research/CLAUDE.md",
+      "../backend/agents/watchdog/CLAUDE.md": "backend/agents/watchdog/CLAUDE.md",
+      "../backend/agents/heartbeat/CLAUDE.md": "backend/agents/heartbeat/CLAUDE.md",
+      "../backend/agents/coordinator/CLAUDE.md": "backend/agents/coordinator/CLAUDE.md",
+      "../backend/.env.example": "backend/.env.example"
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": null,
+      "frameworks": []
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English", "Turkish", "Dutch"],
+        "displayLanguageSelector": true
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": ["python3"]
+      },
+      "appimage": {
+        "bundleMediaFramework": true
+      }
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  }
+}

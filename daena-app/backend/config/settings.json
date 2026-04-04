@@ -1,0 +1,18 @@
+{
+  "language": "en",
+  "theme": "dark",
+  "ai_name": "Daena",
+  "model_cascade_enabled": true,
+  "daily_budget": 5.00,
+  "notifications_enabled": true,
+  "agents_enabled": {
+    "finance": true,
+    "data": true,
+    "marketing": true,
+    "sales": true,
+    "research": true,
+    "watchdog": true,
+    "heartbeat": true,
+    "coordinator": true
+  }
+}

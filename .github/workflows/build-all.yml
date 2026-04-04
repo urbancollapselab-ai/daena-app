@@ -1,0 +1,87 @@
+name: Release Daena Apps
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+          - platform: 'windows-latest'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install Frontend Dependencies
+        working-directory: ./daena-app
+        run: npm install
+
+      - name: Build Tauri App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: './daena-app'
+          tagName: v__VERSION__
+          releaseName: 'Daena v__VERSION__'
+          releaseBody: 'See the attached assets for your operating system.'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+
+      - name: Configure Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup NDK
+        run: sdkmanager "ndk;25.2.9519653"
+
+      - name: Install Frontend Dependencies
+        working-directory: ./daena-app
+        run: npm install
+
+      - name: Build Android APK
+        working-directory: ./daena-app
+        run: npx tauri android build
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Daena-Android-APK
+          path: daena-app/src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
