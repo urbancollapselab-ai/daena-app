@@ -58,6 +58,16 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0" --locked
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build Python Sidecar Payload
+        run: |
+          chmod +x build_sidecar.sh
+          ./build_sidecar.sh
+
       - name: Build frontend
         run: npm run build
 

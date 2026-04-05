@@ -41,26 +41,7 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../backend/server.py": "backend/server.py",
-      "../backend/scripts/__init__.py": "backend/scripts/__init__.py",
-      "../backend/scripts/brain.py": "backend/scripts/brain.py",
-      "../backend/scripts/worker_pool.py": "backend/scripts/worker_pool.py",
-      "../backend/scripts/orchestrator.py": "backend/scripts/orchestrator.py",
-      "../backend/scripts/memory_manager.py": "backend/scripts/memory_manager.py",
-      "../backend/scripts/message_bus.py": "backend/scripts/message_bus.py",
-      "../backend/scripts/agent_triggers.py": "backend/scripts/agent_triggers.py",
-      "../backend/agents/finance/CLAUDE.md": "backend/agents/finance/CLAUDE.md",
-      "../backend/agents/data/CLAUDE.md": "backend/agents/data/CLAUDE.md",
-      "../backend/agents/marketing/CLAUDE.md": "backend/agents/marketing/CLAUDE.md",
-      "../backend/agents/sales/CLAUDE.md": "backend/agents/sales/CLAUDE.md",
-      "../backend/agents/research/CLAUDE.md": "backend/agents/research/CLAUDE.md",
-      "../backend/agents/watchdog/CLAUDE.md": "backend/agents/watchdog/CLAUDE.md",
-      "../backend/agents/heartbeat/CLAUDE.md": "backend/agents/heartbeat/CLAUDE.md",
-      "../backend/agents/coordinator/CLAUDE.md": "backend/agents/coordinator/CLAUDE.md",
-      "../backend/.env.example": "backend/.env.example",
-      "../backend/requirements.txt": "backend/requirements.txt",
-      "../backend/scripts/bootstrap.sh": "backend/scripts/bootstrap.sh",
-      "../backend/scripts/bootstrap.ps1": "backend/scripts/bootstrap.ps1"
+      "bin/daenaserver": "bin/daenaserver"
     },
     "macOS": {
       "minimumSystemVersion": "10.15",

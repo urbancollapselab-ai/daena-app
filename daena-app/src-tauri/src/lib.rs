@@ -42,50 +42,36 @@ fn find_backend_dir(app: &tauri::App) -> Option<PathBuf> {
     None
 }
 
-/// Auto-start the Python backend when app launches
+/// Auto-start the compiled native Python backend sidecar
 fn start_backend(app: &tauri::App) {
-    let backend_dir = match find_backend_dir(app) {
-        Some(dir) => dir,
-        None => {
-            eprintln!("[DAENA] Backend directory not found — running frontend only");
-            return;
-        }
-    };
-
-    let server_py = backend_dir.join("server.py");
-
-    // Create config and data dirs if needed
-    let _ = std::fs::create_dir_all(backend_dir.join("config"));
-    let _ = std::fs::create_dir_all(backend_dir.join("data"));
-    let _ = std::fs::create_dir_all(backend_dir.join("logs"));
-
-    // Copy .env.example to .env if not exists
-    let env_file = backend_dir.join(".env");
-    let env_example = backend_dir.join(".env.example");
-    if !env_file.exists() && env_example.exists() {
-        let _ = std::fs::copy(&env_example, &env_file);
-        println!("[DAENA] Created .env from .env.example");
-    }
-
-    println!("[DAENA] Starting Python backend: {:?}", server_py);
-
-    std::thread::spawn(move || {
-        match StdCommand::new("python3")
-            .arg(&server_py)
-            .current_dir(&backend_dir)
-            .spawn()
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let mut server_exe = resource_dir.join("bin").join("daenaserver").join("daenaserver");
+        
+        #[cfg(windows)]
         {
-            Ok(mut child) => {
-                println!("[DAENA] Backend started with PID: {}", child.id());
-                let _ = child.wait();
-                println!("[DAENA] Backend process exited");
-            }
-            Err(e) => {
-                eprintln!("[DAENA] Failed to start backend: {}", e);
-                eprintln!("[DAENA] Make sure Python 3 is installed");
-            }
+            server_exe.set_extension("exe");
         }
-    });
+
+        println!("[DAENA] Starting Native Backend Sidecar: {:?}", server_exe);
+
+        if server_exe.exists() {
+            std::thread::spawn(move || {
+                match StdCommand::new(&server_exe).spawn() {
+                    Ok(mut child) => {
+                        println!("[DAENA] Native Backend started with PID: {}", child.id());
+                        let _ = child.wait();
+                        println!("[DAENA] Backend process exited");
+                    }
+                    Err(e) => {
+                        eprintln!("[DAENA] Failed to start native backend: {}", e);
+                    }
+                }
+            });
+        } else {
+            eprintln!("[DAENA] CRITICAL: Native backend executable not found at {:?}", server_exe);
+            eprintln!("You must run build_sidecar.sh before packaging!");
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
