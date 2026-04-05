@@ -27,23 +27,12 @@ python3 -m pyinstaller --onedir --noconfirm --name daenaserver \
   server.py
 
 echo "[3/4] Tauri Sidecar dizini hazırlanıyor..."
-# Detect Host Architecture for Tauri Target Naming Convention
-TARGET_ARCH=$(uname -m)
-if [ "$TARGET_ARCH" = "x86_64" ]; then
-    TAURI_TARGET="x86_64-apple-darwin"
-elif [ "$TARGET_ARCH" = "arm64" ]; then
-    TAURI_TARGET="aarch64-apple-darwin"
-else
-    TAURI_TARGET="$TARGET_ARCH-apple-darwin"
-fi
-
-# Tauri expects the binary in src-tauri/bin with the target triple suffix
 BIN_DIR="../src-tauri/bin"
 mkdir -p "$BIN_DIR"
 
 echo "[4/4] Sidecar sisteme yerleştiriliyor..."
-# Copy the compiled directory to Tauri
-cp -R dist/daenaserver "$BIN_DIR/daenaserver-$TAURI_TARGET"
+# Copy the compiled directory to Tauri (Without target suffixes since we use resources mapping, not externalBin)
+cp -R dist/daenaserver "$BIN_DIR/daenaserver"
 
 echo "✅ Tamamlandı! Artık Tauri, Python olmadan kendi kopyası üzerinden çalışabilir."
 echo "Derleme işlemini görmek için 'npm run tauri build' yazabilirsiniz."
