@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 # DAENA v10.0: PyInstaller Sidecar Builder
 # Bu script, server.py'yi otonom bir Unix/Windows dosyasına dönüştürüp Tauri'nin içine yerleştirir.
 
@@ -10,14 +11,14 @@ echo "=================================================="
 cd "$(dirname "$0")/backend" || exit 1
 
 echo "[1/4] PyInstaller ve Bağımlılıklar kuruluyor..."
-python3 -m pip install -r requirements.txt --quiet
-python3 -m pip install pyinstaller --quiet
+python -m pip install -r requirements.txt --quiet
+python -m pip install pyinstaller fastapi uvicorn pydantic --quiet
 
 echo "[2/4] Python beyni (--onedir) modunda Donduruluyor... (Bu işlem uzun sürebilir)"
 
 # Build the payload using PyInstaller
 # --onedir keeps it fast for startup so it doesn't extract large FAISS binaries to temp folder every time
-python3 -m pyinstaller --onedir --noconfirm --name daenaserver \
+python -m pyinstaller --onedir --noconfirm --name daenaserver \
   --hidden-import scipy \
   --hidden-import faiss \
   --hidden-import fastapi \
