@@ -14,6 +14,7 @@ Usage:
 
 import hashlib
 import json
+import sqlite3
 import time
 from typing import Dict, List, Optional
 from pathlib import Path
@@ -89,7 +90,6 @@ class ConfigVersioner:
         return None
 
 
-import sqlite3 # Import deferred to match structure
 
 if __name__ == "__main__":
     v = ConfigVersioner()

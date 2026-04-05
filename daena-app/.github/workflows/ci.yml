@@ -1,0 +1,80 @@
+name: Daena CI/CD Release
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run Defense Pipeline & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Run Adversarial Defense Suite
+        run: python backend/scripts/adversarial_suite.py
+
+  build-desktop:
+    name: Build Native Apps
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install NPM dependencies
+        run: npm ci
+        
+      - name: Install Python dependencies
+        run: pip install -r backend/requirements.txt
+        
+      - name: Build Python Sidecar (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: bash build_sidecar.sh
+        
+      - name: Build Python Sidecar (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          pip install pyinstaller
+          pyinstaller --noconfirm --onedir --console --add-data "backend/scripts:scripts" --add-data "backend/agents:agents" --name daenaserver backend/server.py
+          mkdir -p src-tauri/bin
+          cp -r dist/daenaserver src-tauri/bin/
+
+      - name: Build Tauri App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: app-v__VERSION__
+          releaseName: "Daena v__VERSION__"
+          releaseBody: "See the assets to download this version and install."
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.platform == 'macos-latest' && '--target aarch64-apple-darwin' || '' }}

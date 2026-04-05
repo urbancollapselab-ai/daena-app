@@ -1,1 +1,7 @@
 backend/data/*.db
+
+backend/build/
+backend/daenaserver.spec
+src-tauri/bin/
+backend/test_ci.py
+

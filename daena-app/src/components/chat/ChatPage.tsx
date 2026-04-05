@@ -90,7 +90,7 @@ export function ChatPage() {
       const errorMsg: ChatMessage = {
         id: `msg_${Date.now()}_err`,
         role: "assistant",
-        content: "Backend is not responding. Please check that the Daena backend is running on port 8910.",
+        content: "Backend is not responding. Please check that the Daena backend is running.",
         timestamp: new Date().toISOString(),
       };
       addMessage(convId, errorMsg);

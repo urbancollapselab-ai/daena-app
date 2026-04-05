@@ -440,3 +440,8 @@ pub async fn stop_tunnel() -> Result<bool, String> {
     }
     Ok(false)
 }
+
+#[tauri::command]
+pub async fn get_backend_port() -> Result<u16, String> {
+    Ok(*crate::BACKEND_PORT.get().unwrap_or(&8910))
+}

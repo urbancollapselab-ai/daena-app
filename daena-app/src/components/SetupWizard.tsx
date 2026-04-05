@@ -30,7 +30,9 @@ export const SetupWizard = ({ onComplete }: { onComplete: () => void }) => {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('http://localhost:8910/system/stats');
+      const { getApiBase } = await import('../lib/api');
+      const base = await getApiBase();
+      const res = await fetch(`${base}/system/stats`);
       const data = await res.json();
       setStats(data);
     } catch (e) {
@@ -49,7 +51,9 @@ export const SetupWizard = ({ onComplete }: { onComplete: () => void }) => {
     setVerifying(true);
     setError(null);
     try {
-      const res = await fetch('http://localhost:8910/github/verify', {
+      const { getApiBase } = await import('../lib/api');
+      const base = await getApiBase();
+      const res = await fetch(`${base}/github/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: githubToken })

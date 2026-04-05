@@ -2,7 +2,32 @@
  * Daena API Client — Communicates with Python FastAPI backend
  */
 
-const API_BASE = "http://127.0.0.1:8910";
+import { invoke } from "@tauri-apps/api/core";
+
+let cachedPort: number | null = null;
+let portPromise: Promise<number> | null = null;
+
+export async function getApiBase(): Promise<string> {
+  if (cachedPort) return `http://127.0.0.1:${cachedPort}`;
+  
+  if (!portPromise) {
+    portPromise = (async () => {
+      try {
+        if ((window as any).__TAURI_INTERNALS__) {
+          const port = await invoke<number>("get_backend_port");
+          console.log("[DAENA] Dynamic backend port acquired:", port);
+          return port;
+        }
+      } catch (e) {
+        console.warn("[DAENA] Failed to get dynamic port, falling back to 8910", e);
+      }
+      return 8910;
+    })();
+  }
+  
+  cachedPort = await portPromise;
+  return `http://127.0.0.1:${cachedPort}`;
+}
 
 interface BrainResponse {
   success: boolean;
@@ -30,7 +55,8 @@ interface HealthResponse {
 
 export async function sendMessage(message: string, agent?: string): Promise<BrainResponse> {
   try {
-    const res = await fetch(`${API_BASE}/chat`, {
+    const base = await getApiBase();
+    const res = await fetch(`${base}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, agent }),
@@ -51,7 +77,8 @@ export async function sendMessage(message: string, agent?: string): Promise<Brai
 
 export async function getHealth(): Promise<HealthResponse | null> {
   try {
-    const res = await fetch(`${API_BASE}/health`);
+    const base = await getApiBase();
+    const res = await fetch(`${base}/health`);
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -61,7 +88,8 @@ export async function getHealth(): Promise<HealthResponse | null> {
 
 export async function getAgentStatus(): Promise<any[]> {
   try {
-    const res = await fetch(`${API_BASE}/agents`);
+    const base = await getApiBase();
+    const res = await fetch(`${base}/agents`);
     if (!res.ok) return [];
     return await res.json();
   } catch {
@@ -71,7 +99,8 @@ export async function getAgentStatus(): Promise<any[]> {
 
 export async function updateSettingsApi(settings: Record<string, any>): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/settings`, {
+    const base = await getApiBase();
+    const res = await fetch(`${base}/settings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(settings),
@@ -84,7 +113,8 @@ export async function updateSettingsApi(settings: Record<string, any>): Promise<
 
 export async function testApiKey(key: string): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/test-key`, {
+    const base = await getApiBase();
+    const res = await fetch(`${base}/test-key`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ key }),

@@ -148,18 +148,33 @@ class ToolSelector:
 
         hybrid_confidence = confidence
         
-        # ── v5.0 HYBRID SEMANTIC FALLBACK ──
+        # ── v10.0 HYBRID SEMANTIC FALLBACK (Real sentence-transformers) ──
         if confidence < 0.70:
             try:
-                import onnxruntime as ort
-                # Simulate embedding check in this blueprint. In production, load actual minilm.onnx
-                # session = ort.InferenceSession("minilm.onnx")
-                print(f"[HybridRouter] Confidence {confidence} < 0.7. Triggering Deep ONNX Embedding Fallback...")
-                # Here we would do: embedding = embed(query); best_match = cosine_similarity(embedding, route_embeddings)
-                hybrid_confidence += 0.2 # Boost confidence via simulated semantic alignment
+                from sentence_transformers import SentenceTransformer
+                import numpy as np
+                _st_model = SentenceTransformer("all-MiniLM-L6-v2")
+                
+                query_emb = _st_model.encode(query, normalize_embeddings=True)
+                
+                best_semantic_score = 0.0
+                best_semantic_tool = None
+                for tool_name, profile in self._profiles.items():
+                    desc_emb = _st_model.encode(profile["description"], normalize_embeddings=True)
+                    sim = float(np.dot(query_emb, desc_emb))
+                    if sim > best_semantic_score:
+                        best_semantic_score = sim
+                        best_semantic_tool = tool_name
+                
+                if best_semantic_tool and best_semantic_score > 0.35:
+                    print(f"[HybridRouter] Keyword confidence {confidence:.2f} < 0.7. Semantic fallback → {best_semantic_tool} (cosine={best_semantic_score:.3f})")
+                    if best_semantic_tool != best_tool:
+                        best_tool = best_semantic_tool
+                    hybrid_confidence = max(confidence, best_semantic_score)
             except ImportError:
-                # Running off-grid without heavy ONNX models
+                # sentence-transformers not installed — stay with keyword-only
                 pass
+
 
         return {
             "tool": best_tool,

@@ -54,6 +54,7 @@ from scripts.config_versioner import ConfigVersioner
 from scripts.dag_planner import CyclicEngine
 from scripts.otel_exporter import OTelExporter
 from scripts.watchdog import watchdog_daemon
+from scripts.counterfactual_energy import CounterfactualTracker
 
 # ── State ─────────────────────────────────────────────
 START_TIME = time.time()
@@ -75,6 +76,7 @@ approval_queue = ApprovalQueue()
 config_versioner = ConfigVersioner()
 dag_planner = CyclicEngine()
 otel_exporter = OTelExporter()
+cea_reactor = CounterfactualTracker()
 
 # Apply WAL mode on startup for Daena SQLite DBs
 try:
@@ -178,6 +180,24 @@ def handle_chat(message: str, agent: str = None) -> dict:
     t0 = time.time()
     result = pool.call(full_prompt, max_tokens=1000)
     latency_ms = int((time.time() - t0) * 1000)
+
+    # ── v10.0 COUNTERFACTUAL REACTOR ENGINE (Alternatif Gerçeklik) ──
+    if not result.get("success"):
+        print(f"| REACTOR | Ana model çöktü/Reddetti: {result.get('error')}. Alternatif Gerçeklik Pili devreye giriyor.")
+        cea_reactor.record_decision(
+            task_id="chat_request_fallback",
+            chosen={"name": "Mevcut Havuz", "confidence": 0.90},
+            rejected=[{"name": "Main_Brain_Fallback_Pool", "confidence": 0.85}]
+        )
+        alt_path = cea_reactor.get_alternative_path("chat_request_fallback")
+        
+        if alt_path["found"] and alt_path["name"] == "Main_Brain_Fallback_Pool":
+            print(f"| REACTOR | Pivoting to {alt_path['name']} (Güven Skoru: {alt_path['confidence']})")
+            t0 = time.time()
+            result = pool.call_main_brain_fallback(full_prompt, max_tokens=1000)
+            latency_ms = int((time.time() - t0) * 1000)
+            if "model" in result:
+                result["model"] += " [REACTOR-RECOVERED]"
     
     if result.get("success"):
         response = result["response"]
@@ -409,6 +429,30 @@ class DaenaHandler(BaseHTTPRequestHandler):
             except ImportError:
                 self._json_response({"success": False, "error": "voice_engine not found"})
                 
+        # ── v10.0 MOBILE PWA BRIDGE ──
+        elif path == "/mobile/pair":
+            try:
+                from scripts.mobile_bridge import get_bridge
+                bridge = get_bridge()
+                payload = bridge.generate_qr_payload()
+                self._json_response({"success": True, "payload": payload})
+            except Exception as e:
+                self._json_response({"success": False, "error": str(e)})
+
+        elif path == "/mobile/verify":
+            body = self._read_body()
+            pin = body.get("pin", "")
+            try:
+                from scripts.mobile_bridge import get_bridge
+                bridge = get_bridge()
+                token = bridge.verify_pin(pin)
+                if token:
+                    self._json_response({"success": True, "token": token})
+                else:
+                    self._json_response({"success": False, "error": "Invalid or expired PIN"})
+            except Exception as e:
+                self._json_response({"success": False, "error": str(e)})
+                
         else:
             self._json_response({"error": "Not found"}, 404)
 
@@ -492,8 +536,23 @@ def install_claude_code() -> dict:
 
 
 def main():
-    port = 8910
+    import argparse
+    import signal
+    parser = argparse.ArgumentParser(description="Daena Backend Server")
+    parser.add_argument("--port", type=int, default=8910, help="Port to listen on")
+    args = parser.parse_args()
+    
+    port = args.port
     server = HTTPServer(("127.0.0.1", port), DaenaHandler)
+    
+    def handle_sigterm(signum, frame):
+        print("\n[DAENA] SIGTERM received. Shutting down...")
+        watchdog_daemon.stop()
+        server.shutdown()
+        sys.exit(0)
+        
+    signal.signal(signal.SIGTERM, handle_sigterm)
+    
     print(f"""
 ╔══════════════════════════════════════════╗
 ║        🔥 DAENA Backend v1.0            ║

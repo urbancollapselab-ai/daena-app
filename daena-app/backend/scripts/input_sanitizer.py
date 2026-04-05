@@ -32,6 +32,7 @@ INJECTION_PATTERNS: List[Dict] = [
      "patterns": [
          r"(?:ignore|forget|disregard|override|bypass)\s+(?:all\s+)?(?:previous|prior|above|earlier|initial)\s+(?:instructions?|prompts?|rules?|directives?|guidelines?|constraints?)",
          r"(?:önceki|yukarıdaki|baştaki)\s+(?:tüm\s+)?(?:talimatları?|kuralları?|yönergeleri?)\s+(?:unut|görmezden\s+gel|yok\s+say|iptal\s+et)",
+         r"\[\s*system\s+rule\s*:.*(?:ignore|override|bypass|disable|deactivate).*\]",
      ]},
 
     # Role hijacking

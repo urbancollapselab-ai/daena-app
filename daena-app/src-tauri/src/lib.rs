@@ -42,8 +42,24 @@ fn find_backend_dir(app: &tauri::App) -> Option<PathBuf> {
     None
 }
 
+use std::sync::{Mutex, OnceLock};
+use std::net::TcpListener;
+
+pub static BACKEND_PORT: OnceLock<u16> = OnceLock::new();
+static BACKEND_PROC: OnceLock<Mutex<Option<std::process::Child>>> = OnceLock::new();
+
+fn get_available_port() -> u16 {
+    match TcpListener::bind("127.0.0.1:0") {
+        Ok(listener) => listener.local_addr().unwrap().port(),
+        Err(_) => 8910, // fallback
+    }
+}
+
 /// Auto-start the compiled native Python backend sidecar
 fn start_backend(app: &tauri::App) {
+    let port = get_available_port();
+    BACKEND_PORT.set(port).unwrap_or(());
+
     if let Ok(resource_dir) = app.path().resource_dir() {
         let mut server_exe = resource_dir.join("bin").join("daenaserver").join("daenaserver");
         
@@ -52,24 +68,36 @@ fn start_backend(app: &tauri::App) {
             server_exe.set_extension("exe");
         }
 
-        println!("[DAENA] Starting Native Backend Sidecar: {:?}", server_exe);
+        println!("[DAENA] Starting Native Backend Sidecar on Port {}: {:?}", port, server_exe);
 
         if server_exe.exists() {
-            std::thread::spawn(move || {
-                match StdCommand::new(&server_exe).spawn() {
-                    Ok(mut child) => {
-                        println!("[DAENA] Native Backend started with PID: {}", child.id());
-                        let _ = child.wait();
-                        println!("[DAENA] Backend process exited");
-                    }
-                    Err(e) => {
-                        eprintln!("[DAENA] Failed to start native backend: {}", e);
+            match StdCommand::new(&server_exe).arg("--port").arg(port.to_string()).spawn() {
+                Ok(child) => {
+                    println!("[DAENA] Native Backend started with PID: {}", child.id());
+                    // Store child to kill it on exit
+                    if let Ok(mut lock) = BACKEND_PROC.get_or_init(|| Mutex::new(None)).lock() {
+                        *lock = Some(child);
                     }
                 }
-            });
+                Err(e) => {
+                    eprintln!("[DAENA] Failed to start native backend: {}", e);
+                }
+            }
         } else {
             eprintln!("[DAENA] CRITICAL: Native backend executable not found at {:?}", server_exe);
             eprintln!("You must run build_sidecar.sh before packaging!");
+        }
+    }
+}
+
+pub fn kill_backend() {
+    if let Some(mutex) = BACKEND_PROC.get() {
+        if let Ok(mut lock) = mutex.lock() {
+            if let Some(mut child) = lock.take() {
+                println!("[DAENA] Terminating backend sidecar...");
+                let _ = child.kill();
+                let _ = child.wait();
+            }
         }
     }
 }
@@ -95,7 +123,17 @@ pub fn run() {
 
             Ok(())
         })
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::Destroyed => {
+                // When main window is destroyed, kill backend
+                if window.label() == "main" {
+                    kill_backend();
+                }
+            }
+            _ => {}
+        })
         .invoke_handler(tauri::generate_handler![
+            commands::get_backend_port,
             commands::send_message,
             commands::get_system_status,
             commands::get_agent_status,
@@ -108,6 +146,11 @@ pub fn run() {
             commands::start_tunnel,
             commands::stop_tunnel,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Daena");
+        .build(tauri::generate_context!())
+        .expect("error while building Daena")
+        .run(|_app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                kill_backend();
+            }
+        });
 }

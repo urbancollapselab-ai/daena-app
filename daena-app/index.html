@@ -19,5 +19,15 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Register PWA Service Worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('[Daena] SW registered:', reg.scope))
+            .catch(err => console.log('[Daena] SW registration skipped:', err.message));
+        });
+      }
+    </script>
   </body>
 </html>

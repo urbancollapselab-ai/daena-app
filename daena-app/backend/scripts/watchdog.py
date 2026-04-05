@@ -16,7 +16,7 @@ class SelfHealingWatchdog:
         # Initialize Coverage-Aware Indexing
         try:
             import faiss
-            self.coverage_index = faiss.IndexFlatL2(128) # Simulated 128D semantic space
+            self.coverage_index = faiss.IndexFlatL2(384) # 384D semantic space for MiniLM
             self.coverage_threshold = 0.85
             self._is_faiss_active = True
         except ImportError:
@@ -59,13 +59,23 @@ class SelfHealingWatchdog:
         self.running = False
 
             
-    def _simulated_embedding(self, text: str):
-        """Simulates an embedding vector for FAISS distance checking."""
+    def _get_embedding(self, text: str):
+        """Generates real semantic embeddings using sentence-transformers."""
         import numpy as np
-        import hashlib
-        np.random.seed(int(hashlib.md5(text.encode()).hexdigest(), 16) % (2**32))
-        vec = np.random.rand(128).astype('float32')
-        return vec / np.linalg.norm(vec)
+        try:
+            from sentence_transformers import SentenceTransformer
+            if not hasattr(self, '_embedding_model'):
+                # Load a small, fast 384-dimensional embedding model
+                self._embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+            
+            vec = self._embedding_model.encode(text)
+            return vec.astype('float32') / np.linalg.norm(vec)
+        except ImportError:
+            import hashlib
+            print("[Watchdog] WARNING: sentence-transformers not installed! Using fallback mathematical stubs. Real implementation requires pip install sentence-transformers.")
+            np.random.seed(int(hashlib.md5(text.encode()).hexdigest(), 16) % (2**32))
+            vec = np.random.rand(384).astype('float32')
+            return vec / np.linalg.norm(vec)
 
     def verify_action(self, agent_id: str, action: str, context: str = "") -> bool:
         """
@@ -104,11 +114,11 @@ class SelfHealingWatchdog:
             self.coverage_index.reset()
             embeddings = []
             for known_action in allowed:
-                embeddings.append(self._simulated_embedding(known_action))
+                embeddings.append(self._get_embedding(known_action))
             self.coverage_index.add(np.array(embeddings))
             
             # Check intent distance
-            intent_vec = np.array([self._simulated_embedding(action)])
+            intent_vec = np.array([self._get_embedding(action)])
             distances, indices = self.coverage_index.search(intent_vec, 1)
             
             nearest_distance = float(distances[0][0])

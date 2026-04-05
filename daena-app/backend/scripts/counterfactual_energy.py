@@ -82,6 +82,21 @@ class CounterfactualTracker:
         risk = min(1.0, max(0.0, avg_diff * 2.0))
         return risk
 
+    def get_alternative_path(self, task_id: str) -> dict:
+        """
+        THE REACTOR: If the chosen path fails (e.g. Rate Limit, Exception),
+        this pulls the highest confidence rejected path from the same task context
+        to instantly shift reality to the backup plan.
+        """
+        row = self._conn.execute(
+            "SELECT rejected_edge, rejected_confidence FROM rejected_edges WHERE task_id = ? ORDER BY rejected_confidence DESC LIMIT 1",
+            (task_id,)
+        ).fetchone()
+        
+        if row:
+            return {"name": row["rejected_edge"], "confidence": row["rejected_confidence"], "found": True}
+        return {"found": False}
+
 
 if __name__ == "__main__":
     print("Self-Test: Counterfactual Energy Accounting (CEA)\n")
@@ -103,3 +118,10 @@ if __name__ == "__main__":
         print("[Watchdog Warning] Policy collapse imminent. System is ignoring highly probable alternative realities.")
     else:
         print("Cognitive flexibility is optimal.")
+        
+    print("\nSimulating Path Failure...")
+    backup = tracker.get_alternative_path("task_001")
+    if backup["found"]:
+        print(f"Reactor engaged! Pivoting to Alternative Reality: {backup['name']} (Stored Confidence: {backup['confidence']})")
+    else:
+        print("No alternative paths found.")

@@ -125,7 +125,7 @@ export function SetupWizard() {
     { name: "Node.js",               status: "pending", detail: "Required for app runtime" },
     { name: "Claude Code (Opus 4.6)",status: "pending", detail: "Premium AI brain — optional" },
     { name: "OpenRouter API",        status: "pending", detail: "20-model cascade endpoint" },
-    { name: "Backend Server",        status: "pending", detail: "Local AI server on port 8910" },
+    { name: "Backend Server",        status: "pending", detail: "Local AI server sidecar" },
   ]);
 
   // Auto-advance showcase slides
@@ -153,10 +153,12 @@ export function SetupWizard() {
     updateDep(1, { status: "ok", detail: "Node.js is running (this app)" });
     await sleep(200);
     try {
-      const res = await fetch("http://127.0.0.1:8910/health", { signal: AbortSignal.timeout(3000) });
+      const { getApiBase } = await import('../../lib/api');
+      const base = await getApiBase();
+      const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) });
       if (res.ok) {
         updateDep(0, { status: "ok", detail: "Python backend running" });
-        updateDep(4, { status: "ok", detail: "Server active on port 8910" });
+        updateDep(4, { status: "ok", detail: `Server active on dynamic port` });
       } else throw new Error();
     } catch {
       updateDep(0, { status: "ok", detail: "Python likely installed" });

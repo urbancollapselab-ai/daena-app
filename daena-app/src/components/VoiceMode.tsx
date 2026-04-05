@@ -52,7 +52,9 @@ export const VoiceMode = ({ onClose }: { onClose: () => void }) => {
   const handleSynthesize = async (text: string) => {
     setIsSpeaking(true);
     try {
-      await fetch('http://localhost:8910/voice/speak', {
+      const { getApiBase } = await import('../lib/api');
+      const base = await getApiBase();
+      await fetch(`${base}/voice/speak`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: "Sisteminiz çok iyi durumda Vedat. Sorduğunuz soru analiz edildi." })
