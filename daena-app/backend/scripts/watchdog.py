@@ -60,22 +60,21 @@ class SelfHealingWatchdog:
 
             
     def _get_embedding(self, text: str):
-        """Generates real semantic embeddings using sentence-transformers."""
+        """Generates real semantic embeddings using global singleton service."""
         import numpy as np
-        try:
-            from sentence_transformers import SentenceTransformer
-            if not hasattr(self, '_embedding_model'):
-                # Load a small, fast 384-dimensional embedding model
-                self._embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-            
-            vec = self._embedding_model.encode(text)
-            return vec.astype('float32') / np.linalg.norm(vec)
-        except ImportError:
-            import hashlib
-            print("[Watchdog] WARNING: sentence-transformers not installed! Using fallback mathematical stubs. Real implementation requires pip install sentence-transformers.")
-            np.random.seed(int(hashlib.md5(text.encode()).hexdigest(), 16) % (2**32))
-            vec = np.random.rand(384).astype('float32')
-            return vec / np.linalg.norm(vec)
+        from backend.scripts.embedding_service import encode_text, has_real_embeddings
+        
+        if has_real_embeddings():
+            vec = encode_text(text)
+            if vec is not None:
+                vec_np = np.array(vec, dtype='float32')
+                return vec_np / np.linalg.norm(vec_np)
+                
+        import hashlib
+        print("[Watchdog] WARNING: Global embedding service unreachable. Using fallback mathematical stubs.")
+        np.random.seed(int(hashlib.md5(text.encode()).hexdigest(), 16) % (2**32))
+        vec = np.random.rand(384).astype('float32')
+        return vec / np.linalg.norm(vec)
 
     def verify_action(self, agent_id: str, action: str, context: str = "") -> bool:
         """

@@ -19,39 +19,26 @@ import time
 import struct
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from scripts.embedding_service import encode_text, has_real_embeddings
 
 ROOT = Path(__file__).parent.parent
 DB_PATH = ROOT / "data" / "vector_memory.db"
 
-# Try loading sentence-transformers for real embeddings
-_model = None
-_embed_dim = 0
-_use_embeddings = False
-
-try:
-    from sentence_transformers import SentenceTransformer
-    _model = SentenceTransformer("all-MiniLM-L6-v2")
-    _embed_dim = 384  # MiniLM-L6-v2 outputs 384-dim vectors
-    _use_embeddings = True
-    print("[VectorMemory] ✅ Embedding model loaded (all-MiniLM-L6-v2, 384d)")
-except ImportError:
-    print("[VectorMemory] ⚠️ sentence-transformers not installed — falling back to FTS5 keyword search")
-    print("[VectorMemory]    Install with: pip install sentence-transformers")
-
+_use_embeddings = has_real_embeddings()
 
 def _encode(text: str) -> Optional[bytes]:
-    """Encode text to embedding vector bytes."""
-    if not _use_embeddings or _model is None:
+    """Encode text to embedding vector bytes using the singleton service."""
+    if not _use_embeddings:
         return None
-    vec = _model.encode(text, normalize_embeddings=True)
-    return struct.pack(f"{len(vec)}f", *vec)
-
+    vec_list = encode_text(text)
+    if not vec_list:
+        return None
+    return struct.pack(f"{len(vec_list)}f", *vec_list)
 
 def _decode(data: bytes) -> List[float]:
     """Decode embedding bytes to float list."""
     n = len(data) // 4
     return list(struct.unpack(f"{n}f", data))
-
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
     """Compute cosine similarity between two vectors."""
@@ -126,7 +113,9 @@ class VectorMemory:
 
     def _vector_search(self, query: str, limit: int, min_score: float) -> List[dict]:
         """Semantic search using cosine similarity."""
-        query_vec = _model.encode(query, normalize_embeddings=True).tolist()
+        query_vec = encode_text(query)
+        if not query_vec:
+            return []
 
         # Get all memories with embeddings (bounded to last 1000)
         rows = self._conn.execute("""

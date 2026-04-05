@@ -150,30 +150,30 @@ class ToolSelector:
         
         # ── v10.0 HYBRID SEMANTIC FALLBACK (Real sentence-transformers) ──
         if confidence < 0.70:
-            try:
-                from sentence_transformers import SentenceTransformer
+            from backend.scripts.embedding_service import encode_text, has_real_embeddings
+            if has_real_embeddings():
                 import numpy as np
-                _st_model = SentenceTransformer("all-MiniLM-L6-v2")
+                query_emb = encode_text(query)
                 
-                query_emb = _st_model.encode(query, normalize_embeddings=True)
-                
-                best_semantic_score = 0.0
-                best_semantic_tool = None
-                for tool_name, profile in self._profiles.items():
-                    desc_emb = _st_model.encode(profile["description"], normalize_embeddings=True)
-                    sim = float(np.dot(query_emb, desc_emb))
-                    if sim > best_semantic_score:
-                        best_semantic_score = sim
-                        best_semantic_tool = tool_name
-                
-                if best_semantic_tool and best_semantic_score > 0.35:
-                    print(f"[HybridRouter] Keyword confidence {confidence:.2f} < 0.7. Semantic fallback → {best_semantic_tool} (cosine={best_semantic_score:.3f})")
-                    if best_semantic_tool != best_tool:
-                        best_tool = best_semantic_tool
-                    hybrid_confidence = max(confidence, best_semantic_score)
-            except ImportError:
-                # sentence-transformers not installed — stay with keyword-only
-                pass
+                if query_emb:
+                    query_vec = np.array(query_emb, dtype='float32')
+                    best_semantic_score = 0.0
+                    best_semantic_tool = None
+                    
+                    for tool_name, profile in self._profiles.items():
+                        desc_vec_raw = encode_text(profile["description"])
+                        if desc_vec_raw:
+                            desc_vec = np.array(desc_vec_raw, dtype='float32')
+                            sim = float(np.dot(query_vec, desc_vec))
+                            if sim > best_semantic_score:
+                                best_semantic_score = sim
+                                best_semantic_tool = tool_name
+                    
+                    if best_semantic_tool and best_semantic_score > 0.35:
+                        print(f"[HybridRouter] Keyword confidence {confidence:.2f} < 0.7. Semantic fallback → {best_semantic_tool} (cosine={best_semantic_score:.3f})")
+                        if best_semantic_tool != best_tool:
+                            best_tool = best_semantic_tool
+                        hybrid_confidence = max(confidence, best_semantic_score)
 
 
         return {

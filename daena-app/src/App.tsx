@@ -30,7 +30,14 @@ export default function App() {
   useEffect(() => {
     window.toggleVoiceMode = () => setShowVoiceMode(v => !v);
     window.toggleMobilePairing = () => setShowMobilePairing(v => !v);
-  }, []);
+    
+    // v10.0.5 Cache Buster and Setup Restorer
+    const currentVersion = "10.0.5";
+    if (localStorage.getItem("daena_version") !== currentVersion) {
+      localStorage.setItem("daena_version", currentVersion);
+      setSetupComplete(false); // Force the setup wizard to appear once to guarantee optimal state loaded
+    }
+  }, [setSetupComplete]);
 
   if (!setupComplete) {
     return <SetupWizard onComplete={() => setSetupComplete(true)} />;
