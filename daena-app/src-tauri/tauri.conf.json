@@ -40,9 +40,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": {
-      "bin/daenaserver": "bin/daenaserver"
-    },
+    "resources": [
+      "bin/daenaserver/"
+    ],
     "macOS": {
       "minimumSystemVersion": "10.15",
       "signingIdentity": null,
