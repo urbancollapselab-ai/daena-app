@@ -33,6 +33,7 @@ mkdir -p "$BIN_DIR"
 
 echo "[4/4] Sidecar sisteme yerleştiriliyor..."
 # Copy the compiled directory to Tauri (Without target suffixes since we use resources mapping, not externalBin)
+rm -rf "$BIN_DIR/daenaserver"
 cp -R dist/daenaserver "$BIN_DIR/daenaserver"
 
 echo "✅ Tamamlandı! Artık Tauri, Python olmadan kendi kopyası üzerinden çalışabilir."

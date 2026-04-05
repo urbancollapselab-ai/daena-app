@@ -41,7 +41,7 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "bin/daenaserver/"
+      "bin/daenaserver"
     ],
     "macOS": {
       "minimumSystemVersion": "10.15",

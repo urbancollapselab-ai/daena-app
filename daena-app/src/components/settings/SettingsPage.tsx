@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Globe, Palette, Key, Bot, Bell, Shield, Save, Eye, EyeOff, RotateCcw, Server, Smartphone } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "@/i18n";
+import { MobilePairing } from "../MobilePairing";
 
 const LANGUAGES = [
   { code: "en" as const, name: "English", flag: "🇬🇧" },
@@ -18,6 +19,7 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [tunneling, setTunneling] = useState(false);
   const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
+  const [pairingVisible, setPairingVisible] = useState(false);
   const { t } = useTranslation();
 
   const SECTIONS = [
@@ -261,54 +263,22 @@ export function SettingsPage() {
 
               {activeSection === "mobile" && (
                 <>
-                  <SectionTitle>Mobile Coworking Hub</SectionTitle>
+                  <SectionTitle>Mobile PWA Bağlantısı (Daena v10)</SectionTitle>
                   <div className="text-center py-6">
                     <Smartphone size={40} className="text-[var(--color-primary)] mx-auto mb-3 opacity-80" />
-                    <h3 className="text-sm font-semibold mb-2">Secure Remote Access</h3>
+                    <h3 className="text-sm font-semibold mb-2">iOS / Android PWA </h3>
                     <p className="text-xs text-[var(--color-text-secondary)] max-w-sm mx-auto mb-6">
-                      Generate a secure URL to access your Daena Command Center from anywhere. You can share this link with coworkers or open it on your phone.
+                      Daena'yı cep telefonunuzdan tam kontrol etmek için cihazları eşleştirin. Safari'den açılan uygulamayı "Ana Ekrana Ekle" diyerek yükleyebilirsiniz. Cihazların aynı ağda (Wi-Fi) olması gerekir.
                     </p>
                     
-                    {!tunnelUrl ? (
-                      <button 
-                        onClick={async () => {
-                          setTunneling(true);
-                          const { invoke } = await import('@tauri-apps/api/core');
-                          try {
-                            const res: any = await invoke('start_tunnel');
-                            if (res.success) setTunnelUrl(res.url);
-                          } catch(err) { console.error(err); }
-                          setTunneling(false);
-                        }}
-                        disabled={tunneling}
-                        className="btn-primary mx-auto"
-                      >
-                        {tunneling ? "Establishing Secure Tunnel..." : "Start Coworking Session"}
-                      </button>
-                    ) : (
-                      <div className="space-y-4 animate-in fade-in zoom-in duration-300">
-                        <div className="bg-white p-2 rounded-xl inline-block shadow-lg mx-auto">
-                          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(tunnelUrl)}`} alt="QR Code" width={150} height={150} />
-                        </div>
-                        <div className="glass-sm px-4 py-2 flex items-center justify-between gap-3 max-w-sm mx-auto">
-                          <span className="text-xs font-mono text-[var(--color-accent)] truncate select-all">{tunnelUrl}</span>
-                          <button onClick={() => navigator.clipboard.writeText(tunnelUrl)} className="text-[var(--color-text-tertiary)] hover:text-white">Copy</button>
-                        </div>
-                        <button 
-                          onClick={async () => {
-                            setTunneling(true);
-                            const { invoke } = await import('@tauri-apps/api/core');
-                            await invoke('stop_tunnel');
-                            setTunnelUrl(null);
-                            setTunneling(false);
-                          }}
-                          disabled={tunneling}
-                          className="btn-ghost text-xs text-[var(--color-error)] mx-auto hover:bg-[var(--color-error)]/10"
-                        >
-                          End Remote Session
-                        </button>
-                      </div>
-                    )}
+                    <button 
+                      onClick={() => setPairingVisible(true)}
+                      className="btn-primary mx-auto"
+                    >
+                      QR Kodu Oluştur ve Eşleştir
+                    </button>
+
+                    {pairingVisible && <MobilePairing onClose={() => setPairingVisible(false)} />}
                   </div>
                 </>
               )}
