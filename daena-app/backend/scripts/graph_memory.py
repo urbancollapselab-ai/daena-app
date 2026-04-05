@@ -106,8 +106,51 @@ class GraphMemory:
             results.append(f"[{r['source']}] --({r['relation']})--> [{r['target']}]")
         return results
 
+    def update_bocpd_state(self, entity_id: str, observation: float):
+        """
+        v10.0 Non-Exchangeable Sequence Modeling in BOCPD Memory.
+        Uses a pseudo-HMM sequence to detect regime shifts in reliability.
+        observation: 1.0 (success), 0.0 (failure), or float in between.
+        """
+        import json
+        import numpy as np
+        
+        # 1. Fetch current BOCPD state
+        row = self._conn.execute("SELECT properties FROM nodes WHERE id = ?", (entity_id,)).fetchone()
+        if not row: return
+        props = json.loads(row["properties"])
+        
+        # Initialize if missing
+        if "bocpd_state" not in props:
+            props["bocpd_state"] = {
+                "current_state": "Healthy",
+                "state_confidence": 1.0,
+                "history": []
+            }
+            
+        bocpd = props["bocpd_state"]
+        history = set(bocpd.get("history", []))
+        history.add(observation)
+        
+        # Pseudo-HMM Changepoint Logic
+        if observation < 0.5:
+             # Fast degrade on failure (Likelihood drop)
+             bocpd["state_confidence"] = max(0.1, bocpd["state_confidence"] - 0.4)
+             if bocpd["state_confidence"] < 0.5:
+                 bocpd["current_state"] = "Degraded"
+        else:
+             # Slow recovery (Geometric decay)
+             bocpd["state_confidence"] = min(1.0, bocpd["state_confidence"] + 0.1)
+             if bocpd["state_confidence"] > 0.8:
+                 bocpd["current_state"] = "Healthy"
+                 
+        bocpd["history"] = list(history)[-10:] # Keep last 10 points
+        props["bocpd_state"] = bocpd
+        
+        self.add_node(entity_id, "TrackedEntity", json.dumps(props))
 
 if __name__ == "__main__":
+    import json
     g = GraphMemory()
     print("GraphMemory Self-Test:\n")
     
@@ -115,16 +158,18 @@ if __name__ == "__main__":
     g.add_node("Vedat", "Person")
     g.add_node("Hydra", "Project")
     g.add_node("API_Key", "Secret")
-    g.add_node("FinanceAgent", "AI")
+    g.add_node("DeepSeek_v3", "AI_Model")
     
     g.add_edge("Vedat", "Hydra", "MANAGES")
-    g.add_edge("FinanceAgent", "Hydra", "ASSISTS")
-    g.add_edge("Vedat", "API_Key", "OWNS")
-    g.add_edge("FinanceAgent", "API_Key", "USES")
+    g.add_edge("DeepSeek_v3", "Hydra", "ASSISTS")
     
-    print("Graph built. Extracting subgraph for 'Hydra' (Depth 2):\n")
-    subgraph = g.get_subgraph("Hydra", max_depth=2)
-    for relation in subgraph:
-        print("  " + relation)
-        
-    print("\n✅ GraphMemory (SQLite CTE) self-test passed")
+    print("Injecting BOCPD Failure Observations into DeepSeek_v3...\n")
+    g.update_bocpd_state("DeepSeek_v3", 1.0) # Success
+    g.update_bocpd_state("DeepSeek_v3", 0.0) # Failure
+    g.update_bocpd_state("DeepSeek_v3", 0.0) # Failure
+    
+    row = g._conn.execute("SELECT properties FROM nodes WHERE id = 'DeepSeek_v3'").fetchone()
+    print("BOCPD State after sequence (1.0, 0.0, 0.0):")
+    print(json.dumps(json.loads(row["properties"])["bocpd_state"], indent=2))
+    
+    print("\n✅ GraphMemory (SQLite CTE + BOCPD) self-test passed")

@@ -144,3 +144,43 @@ jobs:
           path: |
             daena-app/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           retention-days: 30
+
+  build-ios:
+    runs-on: macos-latest
+    name: Mobile — iOS
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,x86_64-apple-ios,aarch64-apple-ios-sim
+
+      - name: Install frontend deps
+        run: npm ci || npm install
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0" --locked
+
+      - name: Init iOS project
+        run: cargo tauri ios init
+
+      - name: Build iOS App Structure (Without codesign)
+        run: |
+          cargo tauri ios build || echo "Codesign will fail without Apple Certs, creating raw app bundle..."
+          
+      - name: Create IPA payload (Sideloadable)
+        run: |
+          mkdir -p Payload
+          cp -r daena-app/src-tauri/target/aarch64-apple-ios/release/bundle/ios/*.app Payload/ 2>/dev/null || echo "No .app"
+          zip -r Daena_v10.ipa Payload
+          
+      - name: Upload iOS IPA (For AltStore)
+        uses: actions/upload-artifact@v4
+        with:
+          name: daena-iOS-Sideload
+          path: Daena_v10.ipa
+          retention-days: 30

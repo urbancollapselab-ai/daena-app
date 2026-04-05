@@ -289,7 +289,61 @@ function MessageBubble({ message, index }: { message: ChatMessage; index: number
               : "glass-sm text-[var(--color-text-primary)] rounded-tl-md"
           }`}
         >
-          <div className="markdown-content whitespace-pre-wrap">{message.content}</div>
+          {/* ── v6.0 Generative UI Native Rendering ── */}
+          {(() => {
+            // Check if the message is a Generative UI payload
+            if (!isUser && message.content.trim().startsWith('{"ui_component":')) {
+              try {
+                const uiData = JSON.parse(message.content.trim());
+                
+                // ── v10.0 Specification Adversary (Visual Diff) ──
+                if (uiData.ui_component === "disambiguation") {
+                  return (
+                    <div className="generative-ui-widget w-full mt-2 border border-purple-500/30 rounded-xl overflow-hidden bg-black/40">
+                      <div className="bg-purple-500/20 px-3 py-2 text-xs font-semibold flex items-center gap-2 text-purple-200 border-b border-purple-500/30">
+                        <Sparkles size={12} className="text-purple-400" />
+                        Specification Adversary: Intent Ambiguity Detected
+                      </div>
+                      <div className="p-4 text-sm text-[var(--color-text-secondary)]">
+                        {uiData.message || "Multiple causal paths detected. Please disambiguate:"}
+                        <div className="mt-4 flex flex-col gap-2">
+                          {uiData.paths?.map((path: any, idx: number) => (
+                            <button key={idx} className="text-left px-3 py-2 rounded bg-white/5 border border-white/10 hover:bg-purple-500/10 hover:border-purple-500/50 transition-colors group">
+                               <div className="font-semibold text-purple-300 text-xs mb-1">Path {idx + 1}: {path.intent_interpretation}</div>
+                               <div className="text-[0.6875rem] font-mono text-gray-300">{path.dag_preview}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (uiData.ui_component === "chart" || uiData.ui_component === "table" || uiData.ui_component === "approval") {
+                  return (
+                    <div className="generative-ui-widget w-full mt-2 border border-[var(--color-primary-dim)] rounded-xl overflow-hidden bg-black/20">
+                      <div className="bg-[var(--color-primary-dim)] px-3 py-1.5 text-xs font-semibold flex items-center gap-2 text-white">
+                        <Sparkles size={12} className="text-[var(--color-accent)]" />
+                        Generative UI: {uiData.ui_component.toUpperCase()}
+                      </div>
+                      <div className="p-4 text-sm font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap">
+                        {JSON.stringify(uiData.data, null, 2)}
+                      </div>
+                      {uiData.ui_component === "approval" && (
+                         <div className="flex gap-2 p-3 bg-white/5 border-t border-white/5">
+                            <button className="flex-1 py-1.5 rounded bg-emerald-500/20 text-emerald-400 font-semibold hover:bg-emerald-500/30 transition-colors">Approve Action</button>
+                            <button className="flex-1 py-1.5 rounded bg-rose-500/20 text-rose-400 font-semibold hover:bg-rose-500/30 transition-colors">Block Execution</button>
+                         </div>
+                      )}
+                    </div>
+                  );
+                }
+              } catch (e) {
+                // Not valid JSON or failed to parse, fallback to markdown
+              }
+            }
+            return <div className="markdown-content whitespace-pre-wrap">{message.content}</div>;
+          })()}
 
           {/* Copy button */}
           {!isUser && (

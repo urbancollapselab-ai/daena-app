@@ -11,3 +11,8 @@ sentence-transformers>=3.0
 # Note: sentence-transformers pulls in torch (~2GB).
 # For lighter installation, skip this and use FTS5 fallback:
 #   pip install mcp[cli]
+scipy
+psutil
+numpy
+faiss-cpu
+aiohttp

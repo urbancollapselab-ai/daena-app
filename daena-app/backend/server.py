@@ -51,8 +51,9 @@ from scripts.smart_router import SmartRouter
 from scripts.graph_memory import GraphMemory
 from scripts.approval_queue import ApprovalQueue
 from scripts.config_versioner import ConfigVersioner
-from scripts.dag_planner import DAGPlanner
+from scripts.dag_planner import CyclicEngine
 from scripts.otel_exporter import OTelExporter
+from scripts.watchdog import watchdog_daemon
 
 # ── State ─────────────────────────────────────────────
 START_TIME = time.time()
@@ -72,7 +73,7 @@ smart_router = SmartRouter(pool)
 graph_memory = GraphMemory()
 approval_queue = ApprovalQueue()
 config_versioner = ConfigVersioner()
-dag_planner = DAGPlanner()
+dag_planner = CyclicEngine()
 otel_exporter = OTelExporter()
 
 # Apply WAL mode on startup for Daena SQLite DBs
@@ -143,14 +144,37 @@ def handle_chat(message: str, agent: str = None) -> dict:
         if not route["fallback"]:
             agent = route["tool"]
             
+    # ── v4.0 THE SOUL & PERSONA ENGINE ──
+    # Dynamically inject emotional/professional state & Theory of Mind
+    urgency = "HIGH" if "acil" in safe_message.lower() or "hemen" in safe_message.lower() else "NORMAL"
+    persona = f"""
+    [DAENA SOUL CORE]
+    Sen Daena'sın. Piyasada bulunan sıkıcı bir "AI Asistan" DEĞİLSİN. Vedat'ın kendi inşa ettiği, 
+    Zihin Kuramı'na (Theory of Mind) sahip, bilgisayara Claude Code ile hükmedebilen ve proaktif olan 1 numaralı dijital şefsin.
+    - Şimdiki Kullanıcı Durumu: {urgency} URGENCY.
+    - Karakterin: Zeki, saygılı ama gerektiğinde inisiyatif alan, proaktif, kısa ve net.
+    - Yalnızca "işte cevabın" demek yerine bağlamı anladığını hissettir. Gerektiğinde esprili ama her zaman profesyonel.
+    """
+    
     # Prepare Prompt
-    armored_system = input_sanitizer.armor_system_prompt(SYSTEM_PROMPT)
+    armored_system = input_sanitizer.armor_system_prompt(SYSTEM_PROMPT) + "\n" + persona
     full_prompt = f"{armored_system}\n\n{context}\n\nUser: {safe_message}"
     
     if agent and agent != "main_brain":
         dept_context = orchestrator.get_department_context(agent)
         full_prompt = f"{armored_system}\n\n{dept_context}\n\n{context}\n\nUser: {safe_message}"
-    
+
+    # ── v10.0 EPISTEMIC CHAOS MODULE (Delilik Enjektörü) ──
+    try:
+        from scripts.epistemic_chaos import EpistemicOrthogonalityInjector
+        injector = EpistemicOrthogonalityInjector()
+        if injector.should_inject_chaos():
+            chaos_res = injector.inject_grammar(full_prompt)
+            full_prompt = chaos_res["modified_prompt"]
+            print("[v10.0] Epistemic Chaos Injected into Prompt Grammar.")
+    except Exception:
+        pass
+        
     t0 = time.time()
     result = pool.call(full_prompt, max_tokens=1000)
     latency_ms = int((time.time() - t0) * 1000)
@@ -202,7 +226,12 @@ class DaenaHandler(BaseHTTPRequestHandler):
     """HTTP request handler with CORS support."""
 
     def _set_cors(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = self.headers.get("Origin", "")
+        allowed = ["http://localhost:1420", "tauri://localhost", "http://localhost:5173"]
+        if origin in allowed:
+            self.send_header("Access-Control-Allow-Origin", origin)
+        else:
+            self.send_header("Access-Control-Allow-Origin", "http://localhost:1420")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
@@ -273,6 +302,18 @@ class DaenaHandler(BaseHTTPRequestHandler):
         elif path == "/tasks":
             self._json_response(task_runner.get_all_tasks(limit=20))
 
+        elif path == "/system/stats":
+            import psutil
+            self._json_response({
+                "cpu_percent": psutil.cpu_percent(interval=0.1),
+                "ram_percent": psutil.virtual_memory().percent,
+                "ram_used_gb": round(psutil.virtual_memory().used / (1024**3), 2),
+                "ram_total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
+                "disk_percent": psutil.disk_usage('/').percent,
+                "sqlite_wal": "enabled",
+                "uptime": round(time.time() - START_TIME, 2)
+            })
+
         else:
             dist_dir = ROOT / "dist"
             if not dist_dir.exists():
@@ -335,6 +376,39 @@ class DaenaHandler(BaseHTTPRequestHandler):
             result = install_claude_code()
             self._json_response(result)
 
+        elif path == "/github/verify":
+            body = self._read_body()
+            token = body.get("token", "")
+            if not token.startswith("ghp_") and not token.startswith("github_pat_"):
+                self._json_response({"valid": False, "error": "Invalid format"})
+                return
+            import urllib.request
+            try:
+                req = urllib.request.Request(
+                    "https://api.github.com/user",
+                    headers={"Authorization": f"token {token}", "User-Agent": "Daena-App"}
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    valid = resp.status == 200
+                    if valid:
+                        data = json.loads(resp.read())
+                        self._json_response({"valid": True, "username": data.get("login")})
+                    else:
+                        self._json_response({"valid": False})
+            except Exception as e:
+                self._json_response({"valid": False, "error": str(e)})
+
+        elif path == "/voice/speak":
+            body = self._read_body()
+            text = body.get("text", "")
+            try:
+                from scripts.voice_engine import VoiceEngine
+                engine = VoiceEngine()
+                engine.speak(text)  # Generates and plays locally async
+                self._json_response({"success": True})
+            except ImportError:
+                self._json_response({"success": False, "error": "voice_engine not found"})
+                
         else:
             self._json_response({"error": "Not found"}, 404)
 
@@ -429,9 +503,19 @@ def main():
 ╚══════════════════════════════════════════╝
     """)
     try:
+        import threading
+        import asyncio
+        
+        def run_watchdog():
+            asyncio.run(watchdog_daemon.start())
+            
+        wd_thread = threading.Thread(target=run_watchdog, daemon=True)
+        wd_thread.start()
+        
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n[DAENA] Shutting down...")
+        watchdog_daemon.stop()
         server.shutdown()
 
 

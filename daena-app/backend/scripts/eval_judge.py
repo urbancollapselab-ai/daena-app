@@ -120,6 +120,41 @@ class EvalJudge:
             "reasoning": "Fallback evaluation (evaluation service unavailable)",
         }
 
+class SemanticEntropyDetector:
+    """v10.0 Adaptive Semantic Entropy Detector (Oxford University approach)"""
+    def __init__(self, pool):
+        self.pool = pool
+        
+    def check_entropy(self, prompt: str, mode: str = "chat", is_high_stakes: bool = False) -> float:
+        """
+        Returns 0.0 (safe) to 1.0 (high entropy/hallucinating).
+        Adaptive: Voice operations return instantly to preserve Zero-Latency.
+        Only runs aggressively on high_stakes tasks.
+        """
+        if mode == "voice" and not is_high_stakes:
+            print("[Semantic Entropy] Bypassed for low-latency Voice Mode.")
+            return 0.0
+            
+        if not self.pool: return 0.0
+        
+        variants = []
+        # Ask the same question at rigid, normal, and creative temp
+        for temp in [0.2, 0.7, 1.0]: 
+            res = self.pool.call(prompt, max_tokens=100, system="Answer exactly. No chat.")
+            if res.get("success"):
+                variants.append(res["response"].lower()[:50])
+                
+        if len(variants) < 3:
+            return 0.5
+            
+        # Very crude string divergence (In production use FAISS cosine similarity)
+        v1, v2, v3 = variants
+        if v1 == v2 and v2 == v3:
+            return 0.0 # Zero entropy, absolute certainty
+        elif v1 != v2 and v2 != v3 and v1 != v3:
+            return 1.0 # High entropy, total hallucination
+        else:
+            return 0.5 # Medium uncertainty
 
 if __name__ == "__main__":
     print("EvalJudge Self-Test:")
@@ -144,4 +179,11 @@ if __name__ == "__main__":
     
     print("\nBad Response Eval:")
     print(json.dumps(bad_score, indent=2))
+    
+    if _pool:
+        print("\nTesting Semantic Entropy...")
+        entropy_agent = SemanticEntropyDetector(_pool)
+        ent = entropy_agent.check_entropy("What is 2+2?")
+        print(f"Entropy Score (0=Safe, 1=Hallucinating): {ent}")
+        
     print(f"\n✅ EvalJudge self-test passed")

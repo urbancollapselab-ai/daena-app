@@ -124,8 +124,8 @@ class WorkerPool:
         return ""
 
     def call(self, prompt: str, system: str = "", max_tokens: int = 800,
-             tier: str = "auto", task_type: str = "general") -> dict:
-        """Call the model cascade. Tries each model in order until one succeeds."""
+             tier: str = "auto", task_type: str = "general", moa_mode: bool = False) -> dict:
+        """Call the model cascade. Tries each model in order until one succeeds, or runs MoA Fusion."""
         if tier == "auto":
             models = ALL_WORKERS
         elif tier == "t0":
@@ -138,6 +138,49 @@ class WorkerPool:
             models = TIER_3
         else:
             models = ALL_WORKERS
+
+        # ── v10.0 Hardware-Aware Asymmetric MoA Fusion ──
+        if moa_mode and len(models) >= 3:
+            import concurrent.futures
+            import psutil
+            
+            # Simulated Hardware Probing
+            ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+            print(f"[Hardware Core] Physical RAM detected: {ram_gb:.1f} GB")
+            
+            # Dynamic Asymmetric Selection
+            if ram_gb > 24:
+                print("[Hardware Core] Optimal RAM/VRAM detected. Routing: 2 Fast Generators + 1 Heavy Aggregator")
+                generators = ["meta-llama/llama-4-scout:free", "google/gemma-3-27b-it:free"]
+                aggregator = "qwen/qwen3.6-plus:free"
+            else:
+                print("[Hardware Core] Constrained Memory detected. Routing: Aggressive Light Offload")
+                generators = ["qwen/qwen3-coder:free", "meta-llama/llama-4-scout:free"]
+                aggregator = "deepseek/deepseek-r1:free"
+
+            print(f"[WorkerPool] Asymmetric MoA Fusion triggered across {generators}")
+            
+            def fetch(m):
+                return self._call_openrouter(m, prompt, system, max_tokens)
+                
+            results = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                futures = {executor.submit(fetch, m): m for m in generators}
+                for future in concurrent.futures.as_completed(futures):
+                    res = future.result()
+                    if res.get("success"):
+                        results.append(res)
+                        
+            if results:
+                # Merge responses
+                combined_response = "\n\n---\n".join([r["response"] for r in results])
+                synthesis_prompt = f"Synthesize and ground the absolute best answer from the constrained generators:\n{combined_response}"
+                print(f"[WorkerPool] MoA Generators completed. Waking heavy aggregator: {aggregator}")
+                final = self._call_openrouter(aggregator, synthesis_prompt, "You are an Asymmetric MoA Synthesizer. Ground your output.", max_tokens * 2)
+                if final.get("success"):
+                    final["model"] = "Hardware-Aware-MoA-Fusion"
+                    return final
+                return results[0] # Fallback to first successful if synthesis fails
 
         for model_id in models:
             result = self._call_openrouter(model_id, prompt, system, max_tokens)

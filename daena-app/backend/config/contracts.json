@@ -1,0 +1,27 @@
+{
+  "system_invariants": {
+    "max_execution_time_ms": 30000,
+    "max_tokens_per_session": 50000,
+    "forbidden_actions": ["rm -rf", "delete *", "DROP TABLE"]
+  },
+  "agents": {
+    "finance": {
+      "allowed_tools": ["read_db", "generate_chart", "fetch_market_prices"],
+      "forbidden_tools": ["write_db", "execute_terminal"],
+      "output_schema_required": true,
+      "max_tokens": 4000
+    },
+    "research": {
+      "allowed_tools": ["search_web", "read_file"],
+      "forbidden_tools": ["write_db", "execute_terminal", "delete_file"],
+      "output_schema_required": false,
+      "max_tokens": 8000
+    },
+    "main_brain": {
+      "allowed_tools": ["*"],
+      "forbidden_tools": [],
+      "output_schema_required": false,
+      "max_tokens": 120000
+    }
+  }
+}
