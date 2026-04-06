@@ -99,7 +99,7 @@ interface DepCheck {
 }
 
 /* ── Main Component ───────────────────────────────── */
-export function SetupWizard() {
+export function SetupWizard({ onComplete }: { onComplete?: () => void }) {
   const { updateSettings, settings, setSetupComplete, addConversation } = useAppStore();
   const { t } = useTranslation();
 
@@ -237,6 +237,7 @@ export function SetupWizard() {
     if (step === 5) {
       addConversation();
       setSetupComplete(true);
+      if (onComplete) onComplete();
       return;
     }
     setStep(s => s + 1);

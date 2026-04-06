@@ -1,5 +1,6 @@
 /**
- * Daena API Client — Communicates with Python FastAPI backend
+ * Daena API Client — Communicates with Python backend via HTTP.
+ * All requests have AbortController timeouts to prevent hanging.
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -9,24 +10,30 @@ let portPromise: Promise<number> | null = null;
 
 export async function getApiBase(): Promise<string> {
   if (cachedPort) return `http://127.0.0.1:${cachedPort}`;
-  
+
   if (!portPromise) {
     portPromise = (async () => {
       try {
         if ((window as any).__TAURI_INTERNALS__) {
           const port = await invoke<number>("get_backend_port");
-          console.log("[DAENA] Dynamic backend port acquired:", port);
           return port;
         }
-      } catch (e) {
-        console.warn("[DAENA] Failed to get dynamic port, falling back to 8910", e);
+      } catch {
+        // Fallback to default
       }
       return 8910;
     })();
   }
-  
+
   cachedPort = await portPromise;
   return `http://127.0.0.1:${cachedPort}`;
+}
+
+/** Create a fetch with automatic timeout via AbortController */
+function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs = 5000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(id));
 }
 
 interface BrainResponse {
@@ -39,7 +46,7 @@ interface BrainResponse {
   error?: string;
 }
 
-interface HealthResponse {
+export interface HealthResponse {
   status: string;
   agents: { id: string; name: string; status: string; tasks_today: number }[];
   pool: {
@@ -53,18 +60,30 @@ interface HealthResponse {
   uptime_hours: number;
 }
 
+import { useWSStore } from "../stores/wsTransport";
+
 export async function sendMessage(message: string, agent?: string): Promise<BrainResponse> {
+  // Use WS if connected
+  const wsState = useWSStore.getState();
+  if (wsState.connected) {
+    try {
+      const res = await wsState.send("chat", { message, agent });
+      return res as BrainResponse;
+    } catch (err) {
+      console.warn("WS send failed, falling back to HTTP", err);
+    }
+  }
+
   try {
     const base = await getApiBase();
-    const res = await fetch(`${base}/chat`, {
+    const res = await fetchWithTimeout(`${base}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, agent }),
-    });
+    }, 60000); // 60s for chat (LLM calls can be slow)
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {
-    // Fallback: try running brain.py directly via shell
     return {
       success: false,
       response: "Backend is not running. Please start the Daena backend first.",
@@ -75,10 +94,11 @@ export async function sendMessage(message: string, agent?: string): Promise<Brai
   }
 }
 
+
 export async function getHealth(): Promise<HealthResponse | null> {
   try {
     const base = await getApiBase();
-    const res = await fetch(`${base}/health`);
+    const res = await fetchWithTimeout(`${base}/health`, {}, 4000);
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -89,7 +109,7 @@ export async function getHealth(): Promise<HealthResponse | null> {
 export async function getAgentStatus(): Promise<any[]> {
   try {
     const base = await getApiBase();
-    const res = await fetch(`${base}/agents`);
+    const res = await fetchWithTimeout(`${base}/agents`, {}, 4000);
     if (!res.ok) return [];
     return await res.json();
   } catch {
@@ -100,11 +120,11 @@ export async function getAgentStatus(): Promise<any[]> {
 export async function updateSettingsApi(settings: Record<string, any>): Promise<boolean> {
   try {
     const base = await getApiBase();
-    const res = await fetch(`${base}/settings`, {
+    const res = await fetchWithTimeout(`${base}/settings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(settings),
-    });
+    }, 8000);
     return res.ok;
   } catch {
     return false;
@@ -114,11 +134,11 @@ export async function updateSettingsApi(settings: Record<string, any>): Promise<
 export async function testApiKey(key: string): Promise<boolean> {
   try {
     const base = await getApiBase();
-    const res = await fetch(`${base}/test-key`, {
+    const res = await fetchWithTimeout(`${base}/test-key`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ key }),
-    });
+    }, 15000);
     const data = await res.json();
     return data.valid === true;
   } catch {

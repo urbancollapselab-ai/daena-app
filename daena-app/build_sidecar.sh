@@ -19,12 +19,14 @@ echo "[2/4] Python beyni (--onedir) modunda Donduruluyor... (Bu işlem uzun sür
 # Build the payload using PyInstaller
 # --onedir keeps it fast for startup so it doesn't extract large FAISS binaries to temp folder every time
 python3 -m PyInstaller --onedir --noconfirm --name daenaserver \
-  --hidden-import scipy \
+  --hidden-import fastembed \
   --hidden-import faiss \
   --hidden-import fastapi \
   --hidden-import uvicorn \
   --hidden-import aiohttp \
   --hidden-import psutil \
+  --hidden-import onnxruntime \
+  --hidden-import tokenizers \
   server.py
 
 echo "[3/4] Tauri Sidecar dizini hazırlanıyor..."

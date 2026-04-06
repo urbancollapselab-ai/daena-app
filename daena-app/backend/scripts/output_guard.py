@@ -132,6 +132,8 @@ class OutputGuard:
 
         if issues:
             self._violations.append(result)
+            if len(self._violations) > 100:
+                self._violations = self._violations[-100:]
 
         return result
 
@@ -186,6 +188,8 @@ class OutputGuard:
 
         if issues:
             self._violations.append(result)
+            if len(self._violations) > 100:
+                self._violations = self._violations[-100:]
 
         return result
 

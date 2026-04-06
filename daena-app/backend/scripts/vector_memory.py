@@ -19,16 +19,19 @@ import time
 import struct
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from scripts.embedding_service import encode_text, has_real_embeddings
+from scripts.embedding_service import encode_text, has_real_embeddings_cached
 
 ROOT = Path(__file__).parent.parent
 DB_PATH = ROOT / "data" / "vector_memory.db"
 
-_use_embeddings = has_real_embeddings()
+
+def _use_embeddings() -> bool:
+    """Lazy check — only returns True if model was already loaded elsewhere."""
+    return has_real_embeddings_cached()
 
 def _encode(text: str) -> Optional[bytes]:
     """Encode text to embedding vector bytes using the singleton service."""
-    if not _use_embeddings:
+    if not _use_embeddings():
         return None
     vec_list = encode_text(text)
     if not vec_list:
@@ -106,7 +109,7 @@ class VectorMemory:
 
     def search(self, query: str, limit: int = 5, min_score: float = 0.3) -> List[dict]:
         """Search memories semantically or by keyword."""
-        if _use_embeddings:
+        if _use_embeddings():
             return self._vector_search(query, limit, min_score)
         else:
             return self._fts_search(query, limit)
@@ -115,13 +118,13 @@ class VectorMemory:
         """Semantic search using cosine similarity."""
         query_vec = encode_text(query)
         if not query_vec:
-            return []
+            return self._fts_search(query, limit)
 
-        # Get all memories with embeddings (bounded to last 1000)
+        # Bounded to last 200 memories to prevent RAM bloat
         rows = self._conn.execute("""
             SELECT id, timestamp, role, content, agent, embedding
             FROM memories WHERE embedding IS NOT NULL
-            ORDER BY epoch DESC LIMIT 1000
+            ORDER BY epoch DESC LIMIT 200
         """).fetchall()
 
         scored = []
@@ -198,4 +201,4 @@ if __name__ == "__main__":
     for r in results2:
         print(f"  [{r['score']:.3f}] {r['content'][:80]}...")
 
-    print(f"\n✅ VectorMemory self-test passed ({'embedding' if _use_embeddings else 'FTS5 fallback'} mode)")
+    print(f"\n�� VectorMemory self-test passed ({'embedding' if _use_embeddings() else 'FTS5 fallback'} mode)")

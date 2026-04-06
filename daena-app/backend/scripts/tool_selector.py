@@ -150,8 +150,8 @@ class ToolSelector:
         
         # ── v10.0 HYBRID SEMANTIC FALLBACK (Real sentence-transformers) ──
         if confidence < 0.70:
-            from backend.scripts.embedding_service import encode_text, has_real_embeddings
-            if has_real_embeddings():
+            from scripts.embedding_service import encode_text, has_real_embeddings_cached
+            if has_real_embeddings_cached():
                 import numpy as np
                 query_emb = encode_text(query)
                 

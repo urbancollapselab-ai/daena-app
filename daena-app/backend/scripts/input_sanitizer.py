@@ -172,6 +172,8 @@ class InputSanitizer:
 
         if attacks:
             self._history.append(result)
+            if len(self._history) > 100:
+                self._history = self._history[-100:]
 
         return result
 

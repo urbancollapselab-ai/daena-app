@@ -6,7 +6,7 @@ import {
   MessageSquare, Shield, Eye, Terminal, Wifi, WifiOff,
   RefreshCw, MemoryStick, Server, Network
 } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, memo, useCallback } from "react";
 
 const AGENT_COLORS: Record<string, { primary: string; gradient: string; glow: string }> = {
   main_brain: { primary: "#6C63FF", gradient: "linear-gradient(135deg, #6C63FF, #8B7BFF)", glow: "rgba(108,99,255,0.3)" },
@@ -34,12 +34,20 @@ function generateMemoryUsage(seed: number): number {
 export function AgentsPage() {
   const { agents, updateAgent, settings, models } = useAppStore();
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
-  const [now, setNow] = useState(new Date());
 
-  useEffect(() => {
-    const int = setInterval(() => setNow(new Date()), 5000);
-    return () => clearInterval(int);
-  }, []);
+  // Memoize activity data so it doesn't recalculate every render
+  const agentActivityMap = useMemo(() => {
+    const map: Record<string, { activity: number[]; maxAct: number; memUsage: number }> = {};
+    for (const agent of agents) {
+      const activity = generateActivity(agent.id.charCodeAt(0) + agent.id.length);
+      map[agent.id] = {
+        activity,
+        maxAct: Math.max(...activity),
+        memUsage: generateMemoryUsage(agent.id.charCodeAt(0)),
+      };
+    }
+    return map;
+  }, [agents]);
 
   const selected = agents.find((a) => a.id === selectedAgent);
 
@@ -79,11 +87,10 @@ export function AgentsPage() {
           {agents.map((agent, i) => {
             const c = AGENT_COLORS[agent.id] || AGENT_COLORS.main_brain;
             const isActive = agent.status === "active" || agent.status === "monitoring" || agent.status === "running";
-            const activity = generateActivity(agent.id.charCodeAt(0) + agent.id.length);
-            const maxAct = Math.max(...activity);
-            const memUsage = generateMemoryUsage(agent.id.charCodeAt(0));
+            const { activity, maxAct, memUsage } = agentActivityMap[agent.id] || { activity: [], maxAct: 1, memUsage: 0 };
             const isSelected = selectedAgent === agent.id;
             const uptime = (99 + Math.abs(Math.sin(i)) * 0.99).toFixed(1);
+            const now = new Date();
 
             return (
               <motion.div

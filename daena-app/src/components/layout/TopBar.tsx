@@ -1,41 +1,54 @@
 import { useAppStore } from "@/stores/appStore";
-import { Wifi, WifiOff, Zap, Clock, Shield, Activity, Radio } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Wifi, WifiOff, Zap, Clock, Shield } from "lucide-react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { getHealth } from "@/lib/api";
 
 export function TopBar() {
   const { systemStatus, setSystemStatus, currentPage } = useAppStore();
   const [backendOnline, setBackendOnline] = useState(false);
   const [time, setTime] = useState(new Date());
+  const failCountRef = useRef(0);
 
   useEffect(() => {
     const interval = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
 
+  const check = useCallback(async () => {
+    const health = await getHealth();
+    if (health) {
+      failCountRef.current = 0;
+      setBackendOnline(true);
+      setSystemStatus({
+        agentsActive: health.agents.filter((a: any) => a.status !== "idle").length,
+        agentsTotal: health.agents.length,
+        modelsAvailable: health.pool.available_workers,
+        modelsTotal: health.pool.total_workers,
+        tokensToday: health.pool.stats.total_calls * 150,
+        costToday: 0,
+        uptimeHours: health.uptime_hours,
+        freePercent: (health.pool.free_models / health.pool.total_workers) * 100,
+      });
+    } else {
+      failCountRef.current++;
+      setBackendOnline(false);
+    }
+  }, [setSystemStatus]);
+
   useEffect(() => {
-    const check = async () => {
-      const health = await getHealth();
-      if (health) {
-        setBackendOnline(true);
-        setSystemStatus({
-          agentsActive: health.agents.filter((a: any) => a.status !== "idle").length,
-          agentsTotal: health.agents.length,
-          modelsAvailable: health.pool.available_workers,
-          modelsTotal: health.pool.total_workers,
-          tokensToday: health.pool.stats.total_calls * 150,
-          costToday: 0,
-          uptimeHours: health.uptime_hours,
-          freePercent: (health.pool.free_models / health.pool.total_workers) * 100,
-        });
-      } else {
-        setBackendOnline(false);
-      }
-    };
     check();
-    const interval = setInterval(check, 15000);
-    return () => clearInterval(interval);
-  }, []);
+    // Exponential backoff: 15s -> 30s -> 60s on consecutive failures
+    const getInterval = () => Math.min(15000 * Math.pow(2, failCountRef.current), 60000);
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      timer = setTimeout(async () => {
+        await check();
+        schedule();
+      }, getInterval());
+    };
+    schedule();
+    return () => clearTimeout(timer);
+  }, [check]);
 
   const pageTitles: Record<string, { title: string; subtitle: string }> = {
     chat: { title: "Chat", subtitle: "Talk to your AI agents" },

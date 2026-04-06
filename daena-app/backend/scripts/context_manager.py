@@ -15,6 +15,7 @@ Usage:
 
 import json
 import time
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -27,42 +28,53 @@ def estimate_tokens(text: str) -> int:
 
 
 class ContextManager:
+    MAX_MESSAGES = 200  # Hard cap to prevent unbounded growth
+    MAX_SUMMARIES = 20  # Keep last N summaries only
+
     def __init__(self, max_tokens: int = 8000, summary_threshold: int = 6000):
         self._messages: List[Dict] = []
-        self._pinned: set = set()  # IDs of pinned (important) messages
+        self._pinned: set = set()
         self._summaries: List[str] = []
         self._max_tokens = max_tokens
         self._summary_threshold = summary_threshold
         self._msg_counter = 0
         self._total_tokens_processed = 0
+        self._lock = threading.Lock()
 
     def add(self, role: str, content: str, agent: str = None, important: bool = False) -> int:
-        """Add a message. Returns message ID."""
-        self._msg_counter += 1
-        msg = {
-            "id": self._msg_counter,
-            "role": role,
-            "content": content,
-            "agent": agent,
-            "tokens": estimate_tokens(content),
-            "timestamp": time.time(),
-            "important": important,
-        }
-        self._messages.append(msg)
-        self._total_tokens_processed += msg["tokens"]
+        """Add a message. Returns message ID. Thread-safe."""
+        with self._lock:
+            self._msg_counter += 1
+            msg = {
+                "id": self._msg_counter,
+                "role": role,
+                "content": content[:2000],  # Hard cap per message
+                "agent": agent,
+                "tokens": estimate_tokens(content),
+                "timestamp": time.time(),
+                "important": important,
+            }
+            self._messages.append(msg)
+            self._total_tokens_processed += msg["tokens"]
 
-        if important:
-            self._pinned.add(self._msg_counter)
+            if important:
+                self._pinned.add(self._msg_counter)
 
-        # Auto-detect important messages
-        if self._is_important(content):
-            self._pinned.add(self._msg_counter)
-            msg["important"] = True
+            if self._is_important(content):
+                self._pinned.add(self._msg_counter)
+                msg["important"] = True
 
-        # Check if we need to compress
-        self._maybe_compress()
+            # Hard cap: force compress if too many messages
+            if len(self._messages) > self.MAX_MESSAGES:
+                self._maybe_compress()
+            else:
+                self._maybe_compress()
 
-        return self._msg_counter
+            # Trim summaries
+            if len(self._summaries) > self.MAX_SUMMARIES:
+                self._summaries = self._summaries[-self.MAX_SUMMARIES:]
+
+            return self._msg_counter
 
     def pin(self, msg_id: int):
         """Pin a message so it's never evicted."""

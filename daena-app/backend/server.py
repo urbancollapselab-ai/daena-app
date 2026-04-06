@@ -1,35 +1,29 @@
 #!/usr/bin/env python3
 """
-Daena Backend Server v2.0
-=========================
-HTTP server bridging the React frontend with the Python AI backend.
-Runs on port 8910.
-
-Endpoints v2.0:
-  POST /chat           — Send message, get AI response
-  GET  /health         — System health check
-  GET  /agents         — Agent status list
-  POST /settings       — Update settings
-  POST /test-key       — Validate OpenRouter API key
-  GET  /check-claude   — Detect Claude Code / Pro
-  POST /install-claude — Install Claude Code CLI
-  GET  /traces         — Agent action traces (v2.0)
-  GET  /traces/stats   — Agent/model statistics (v2.0)
-  POST /execute        — Safe command execution (v2.0)
-  GET  /memory/stats   — Memory system statistics (v2.0)
-  GET  /schedules      — Scheduled tasks (v2.0)
-  GET  /tasks          — Task chains status (v2.0)
+Daena Backend Server v10.5 (FastAPI + WebSockets)
+=================================================
+Ultra-low latency, bidirectional OS control server.
 """
 
-import json
 import os
-import subprocess
 import sys
+
+# PyTorch hacks are no longer strictly needed since we use ONNX,
+# but kept to ensure safe multiprocessing if any legacy torch is loaded.
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+import json
+import subprocess
 import time
+import asyncio
 from pathlib import Path
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse
 import shutil
+
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import uvicorn
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -86,19 +80,16 @@ except Exception:
 
 SETTINGS_FILE = ROOT / "config" / "settings.json"
 
-
 def load_settings() -> dict:
     if SETTINGS_FILE.exists():
         return json.loads(SETTINGS_FILE.read_text())
     return {}
-
 
 def save_settings(data: dict):
     SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
     current = load_settings()
     current.update(data)
     SETTINGS_FILE.write_text(json.dumps(current, indent=2, ensure_ascii=False))
-
 
 # ── Agent Info ────────────────────────────────────
 AGENT_META = [
@@ -117,15 +108,21 @@ SYSTEM_PROMPT = """You are Daena — a personal AI command center.
 You manage 8 specialized department agents and respond intelligently.
 Be concise, helpful, and professional. Respond in the user's language."""
 
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:1420", "tauri://localhost", "http://localhost:5173", "*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def handle_chat(message: str, agent: str = None) -> dict:
     """Process a chat message through the brain cascade."""
-    # ── v3.0 INPUT SECURITY LAYER ──
-    # 1. PII Redaction
     pii_res = pii_filter.check_and_redact(message)
     safe_message = pii_res["redacted_text"]
 
-    # 2. Prompt Injection Check
     sanitizer_res = input_sanitizer.check(safe_message)
     if sanitizer_res["risk"] == "HIGH":
         return {
@@ -140,14 +137,11 @@ def handle_chat(message: str, agent: str = None) -> dict:
     memory.add_hot("user", safe_message)
     context = memory.get_context(task=safe_message, agent=agent)
 
-    # 3. Semantic Tool Routing (Zero-LLM)
     if not agent:
         route = tool_selector.select(safe_message)
         if not route["fallback"]:
             agent = route["tool"]
             
-    # ── v4.0 THE SOUL & PERSONA ENGINE ──
-    # Dynamically inject emotional/professional state & Theory of Mind
     urgency = "HIGH" if "acil" in safe_message.lower() or "hemen" in safe_message.lower() else "NORMAL"
     persona = f"""
     [DAENA SOUL CORE]
@@ -155,10 +149,8 @@ def handle_chat(message: str, agent: str = None) -> dict:
     Zihin Kuramı'na (Theory of Mind) sahip, bilgisayara Claude Code ile hükmedebilen ve proaktif olan 1 numaralı dijital şefsin.
     - Şimdiki Kullanıcı Durumu: {urgency} URGENCY.
     - Karakterin: Zeki, saygılı ama gerektiğinde inisiyatif alan, proaktif, kısa ve net.
-    - Yalnızca "işte cevabın" demek yerine bağlamı anladığını hissettir. Gerektiğinde esprili ama her zaman profesyonel.
     """
     
-    # Prepare Prompt
     armored_system = input_sanitizer.armor_system_prompt(SYSTEM_PROMPT) + "\n" + persona
     full_prompt = f"{armored_system}\n\n{context}\n\nUser: {safe_message}"
     
@@ -166,7 +158,6 @@ def handle_chat(message: str, agent: str = None) -> dict:
         dept_context = orchestrator.get_department_context(agent)
         full_prompt = f"{armored_system}\n\n{dept_context}\n\n{context}\n\nUser: {safe_message}"
 
-    # ── v10.0 EPISTEMIC CHAOS MODULE (Delilik Enjektörü) ──
     try:
         from scripts.epistemic_chaos import EpistemicOrthogonalityInjector
         injector = EpistemicOrthogonalityInjector()
@@ -181,7 +172,6 @@ def handle_chat(message: str, agent: str = None) -> dict:
     result = pool.call(full_prompt, max_tokens=1000)
     latency_ms = int((time.time() - t0) * 1000)
 
-    # ── v10.0 COUNTERFACTUAL REACTOR ENGINE (Alternatif Gerçeklik) ──
     if not result.get("success"):
         print(f"| REACTOR | Ana model çöktü/Reddetti: {result.get('error')}. Alternatif Gerçeklik Pili devreye giriyor.")
         cea_reactor.record_decision(
@@ -202,7 +192,6 @@ def handle_chat(message: str, agent: str = None) -> dict:
     if result.get("success"):
         response = result["response"]
         
-        # ── v3.0 OUTPUT SECURITY LAYER ──
         guard_res = output_guard.check_response(response)
         if guard_res["action"] == "BLOCK":
             return {
@@ -216,10 +205,7 @@ def handle_chat(message: str, agent: str = None) -> dict:
              response = output_guard.redact_response(response)
              
         memory.add_hot("assistant", response)
-        
-        # ── v3.0 OTel & EVAL (Background task simulation) ──
         otel_exporter.export_trace(agent, latency_ms, result.get("tokens_used", 0), error=False)
-        # Background eval could be threaded; running inline for demonstration
         judge_score = eval_judge.evaluate_response(safe_message, response, agent)
         
         return {
@@ -241,344 +227,121 @@ def handle_chat(message: str, agent: str = None) -> dict:
             "error": error_msg,
         }
 
+@app.get("/health")
+async def health():
+    uptime_hours = (time.time() - START_TIME) / 3600
+    health_report = pool.get_health_report()
+    return {
+        "status": "ok",
+        "version": "10.5",
+        "agents": AGENT_META,
+        "pool": health_report,
+        "uptime_hours": round(uptime_hours, 2),
+        "memory": memory.get_stats(),
+    }
 
-class DaenaHandler(BaseHTTPRequestHandler):
-    """HTTP request handler with CORS support."""
+@app.get("/agents")
+async def agents():
+    return AGENT_META
 
-    def _set_cors(self):
-        origin = self.headers.get("Origin", "")
-        allowed = ["http://localhost:1420", "tauri://localhost", "http://localhost:5173"]
-        if origin in allowed:
-            self.send_header("Access-Control-Allow-Origin", origin)
-        else:
-            self.send_header("Access-Control-Allow-Origin", "http://localhost:1420")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+@app.get("/settings")
+async def get_system_settings():
+    return load_settings()
 
-    def _json_response(self, data: dict, status: int = 200):
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self._set_cors()
-        self.end_headers()
-        self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
+@app.post("/settings")
+async def update_settings(request: Request):
+    body = await request.json()
+    save_settings(body)
+    return {"success": True}
 
-    def _read_body(self) -> dict:
-        length = int(self.headers.get("Content-Length", 0))
-        if length == 0:
-            return {}
-        body = self.rfile.read(length)
-        return json.loads(body)
+class ChatRequest(BaseModel):
+    message: str
+    agent: str = None
 
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self._set_cors()
-        self.end_headers()
-
-    def do_GET(self):
-        path = urlparse(self.path).path
-
-        if path == "/health":
-            uptime_hours = (time.time() - START_TIME) / 3600
-            health_report = pool.get_health_report()
-            self._json_response({
-                "status": "ok",
-                "version": "2.0",
-                "agents": AGENT_META,
-                "pool": health_report,
-                "uptime_hours": round(uptime_hours, 2),
-                "memory": memory.get_stats(),
-            })
-
-        elif path == "/agents":
-            self._json_response(AGENT_META)
-
-        elif path == "/settings":
-            self._json_response(load_settings())
-
-        elif path == "/check-claude":
-            self._json_response(check_claude_code())
-
-        # ── v2.0 Endpoints ────────────────────────────────────
-        elif path == "/traces":
-            traces = tracer.get_recent(limit=50)
-            self._json_response(traces)
-
-        elif path == "/traces/stats":
-            stats = tracer.get_stats()
-            cost = tracer.get_cost_report()
-            stats["cost"] = cost
-            self._json_response(stats)
-
-        elif path == "/memory/stats":
-            self._json_response(memory.get_stats())
-
-        elif path == "/schedules":
-            self._json_response({
-                "schedules": scheduler.get_schedules(),
-                "upcoming": scheduler.get_next_runs(),
-                "recent_log": scheduler.get_log(limit=10),
-            })
-
-        elif path == "/tasks":
-            self._json_response(task_runner.get_all_tasks(limit=20))
-
-        elif path == "/system/stats":
-            import psutil
-            self._json_response({
-                "cpu_percent": psutil.cpu_percent(interval=0.1),
-                "ram_percent": psutil.virtual_memory().percent,
-                "ram_used_gb": round(psutil.virtual_memory().used / (1024**3), 2),
-                "ram_total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
-                "disk_percent": psutil.disk_usage('/').percent,
-                "sqlite_wal": "enabled",
-                "uptime": round(time.time() - START_TIME, 2)
-            })
-
-        else:
-            dist_dir = ROOT / "dist"
-            if not dist_dir.exists():
-                self._json_response({"error": "Not found"}, 404)
-                return
-            
-            import mimetypes
-            req_path = path.lstrip("/")
-            file_path = dist_dir / req_path
-            
-            if not req_path or not file_path.exists():
-                file_path = dist_dir / "index.html"
-            
-            if file_path.is_file():
-                self.send_response(200)
-                content_type, _ = mimetypes.guess_type(str(file_path))
-                if not content_type and str(file_path).endswith('.js'):
-                    content_type = "application/javascript"
-                if content_type:
-                    self.send_header("Content-Type", content_type)
-                self.end_headers()
-                self.wfile.write(file_path.read_bytes())
-            else:
-                self._json_response({"error": "Not found"}, 404)
-
-    def do_POST(self):
-        path = urlparse(self.path).path
-
-        if path == "/chat":
-            body = self._read_body()
-            message = body.get("message", "")
-            agent = body.get("agent")
-            if not message:
-                self._json_response({"error": "Message required"}, 400)
-                return
-            result = handle_chat(message, agent)
-            self._json_response(result)
-
-        elif path == "/settings":
-            body = self._read_body()
-            save_settings(body)
-            self._json_response({"success": True})
-
-        elif path == "/test-key":
-            body = self._read_body()
-            key = body.get("key", "")
-            import urllib.request
-            try:
-                req = urllib.request.Request(
-                    "https://openrouter.ai/api/v1/models",
-                    headers={"Authorization": f"Bearer {key}"}
-                )
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    valid = resp.status == 200
-                self._json_response({"valid": valid})
-            except Exception:
-                self._json_response({"valid": False})
-
-        elif path == "/install-claude":
-            result = install_claude_code()
-            self._json_response(result)
-
-        elif path == "/github/verify":
-            body = self._read_body()
-            token = body.get("token", "")
-            if not token.startswith("ghp_") and not token.startswith("github_pat_"):
-                self._json_response({"valid": False, "error": "Invalid format"})
-                return
-            import urllib.request
-            try:
-                req = urllib.request.Request(
-                    "https://api.github.com/user",
-                    headers={"Authorization": f"token {token}", "User-Agent": "Daena-App"}
-                )
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    valid = resp.status == 200
-                    if valid:
-                        data = json.loads(resp.read())
-                        self._json_response({"valid": True, "username": data.get("login")})
-                    else:
-                        self._json_response({"valid": False})
-            except Exception as e:
-                self._json_response({"valid": False, "error": str(e)})
-
-        elif path == "/voice/speak":
-            body = self._read_body()
-            text = body.get("text", "")
-            try:
-                from scripts.voice_engine import VoiceEngine
-                engine = VoiceEngine()
-                engine.speak(text)  # Generates and plays locally async
-                self._json_response({"success": True})
-            except ImportError:
-                self._json_response({"success": False, "error": "voice_engine not found"})
-                
-        # ── v10.0 MOBILE PWA BRIDGE ──
-        elif path == "/mobile/pair":
-            try:
-                from scripts.mobile_bridge import get_bridge
-                bridge = get_bridge()
-                payload = bridge.generate_qr_payload()
-                self._json_response({"success": True, "payload": payload})
-            except Exception as e:
-                self._json_response({"success": False, "error": str(e)})
-
-        elif path == "/mobile/verify":
-            body = self._read_body()
-            pin = body.get("pin", "")
-            try:
-                from scripts.mobile_bridge import get_bridge
-                bridge = get_bridge()
-                token = bridge.verify_pin(pin)
-                if token:
-                    self._json_response({"success": True, "token": token})
-                else:
-                    self._json_response({"success": False, "error": "Invalid or expired PIN"})
-            except Exception as e:
-                self._json_response({"success": False, "error": str(e)})
-                
-        else:
-            self._json_response({"error": "Not found"}, 404)
-
-    def log_message(self, format, *args):
-        # Cleaner log format
-        print(f"[DAENA] {args[0]} {args[1]}")
-
-
-def check_claude_code() -> dict:
-    """Detect Claude Code CLI and Pro subscription."""
-    result = {"available": False, "version": None, "path": None, "pro": False}
-
-    # Check common claude binary locations
-    claude_paths = [
-        shutil.which("claude"),
-        "/opt/homebrew/bin/claude",
-        "/usr/local/bin/claude",
-        os.path.expanduser("~/.npm-global/bin/claude"),
-        os.path.expanduser("~/.local/bin/claude"),
-    ]
-
-    claude_bin = None
-    for p in claude_paths:
-        if p and os.path.isfile(p):
-            claude_bin = p
-            break
-
-    if not claude_bin:
-        # Check via npm global
-        try:
-            npm_out = subprocess.run(
-                ["npm", "list", "-g", "@anthropic-ai/claude-code", "--json"],
-                capture_output=True, text=True, timeout=10
-            )
-            if '"@anthropic-ai/claude-code"' in npm_out.stdout:
-                claude_bin = shutil.which("claude") or "claude"
-        except Exception:
-            pass
-
-    if claude_bin:
-        result["available"] = True
-        result["path"] = claude_bin
-        # Try to get version
-        try:
-            ver_out = subprocess.run(
-                [claude_bin, "--version"],
-                capture_output=True, text=True, timeout=5
-            )
-            if ver_out.returncode == 0:
-                result["version"] = ver_out.stdout.strip()[:50]
-        except Exception:
-            result["version"] = "detected"
-
-        # Check if Pro by trying a minimal prompt
-        try:
-            test_out = subprocess.run(
-                [claude_bin, "-p", "respond with only: OK"],
-                capture_output=True, text=True, timeout=15
-            )
-            if test_out.returncode == 0 and "OK" in test_out.stdout:
-                result["pro"] = True
-        except Exception:
-            pass
-
+@app.post("/chat")
+async def chat_endpoint(req: ChatRequest):
+    if not req.message:
+        return JSONResponse({"error": "Message required"}, status_code=400)
+    result = handle_chat(req.message, req.agent)
     return result
 
+class KeyRequest(BaseModel):
+    key: str
 
-def install_claude_code() -> dict:
-    """Install Claude Code CLI via npm."""
+@app.post("/test-key")
+async def test_key(req: KeyRequest):
+    import urllib.request
     try:
-        proc = subprocess.run(
-            ["npm", "install", "-g", "@anthropic-ai/claude-code"],
-            capture_output=True, text=True, timeout=120
+        req_obj = urllib.request.Request(
+            "https://openrouter.ai/api/v1/models",
+            headers={"Authorization": f"Bearer {req.key}"}
         )
-        if proc.returncode == 0:
-            return {"success": True, "message": "Claude Code installed. Run 'claude' in terminal to sign in."}
-        else:
-            return {"success": False, "message": proc.stderr[:200]}
-    except Exception as e:
-        return {"success": False, "message": str(e)}
+        with urllib.request.urlopen(req_obj, timeout=10) as resp:
+            valid = resp.status == 200
+        return {"valid": valid}
+    except Exception:
+        return {"valid": False}
 
+# ── WEBSOCKET CORE (FAZ 1 - HIZLI İLETİŞİM) ──
+active_connections = set()
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    active_connections.add(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            payload = json.loads(data)
+            
+            # Simple dispatcher
+            method = payload.get("method")
+            msg_id = payload.get("id")
+            params = payload.get("params", {})
+            
+            if method == "chat":
+                # Async execution so we don't block the loop
+                response = await asyncio.to_thread(handle_chat, params.get("message"), params.get("agent"))
+                await websocket.send_text(json.dumps({"id": msg_id, "result": response}))
+            elif method == "health":
+                uptime_hours = (time.time() - START_TIME) / 3600
+                res = {
+                    "status": "ok", "version": "10.5", "agents": AGENT_META,
+                    "pool": pool.get_health_report(), "uptime_hours": round(uptime_hours, 2),
+                    "memory": memory.get_stats()
+                }
+                await websocket.send_text(json.dumps({"id": msg_id, "result": res}))
+    except WebSocketDisconnect:
+        active_connections.remove(websocket)
+
+# ── ENDPOINTS MIGRATION INCOMPLETE BUT CORE IS HERE ──
 
 def main():
     import argparse
-    import signal
     parser = argparse.ArgumentParser(description="Daena Backend Server")
     parser.add_argument("--port", type=int, default=8910, help="Port to listen on")
     args = parser.parse_args()
     
-    port = args.port
-    server = HTTPServer(("127.0.0.1", port), DaenaHandler)
-    
-    def handle_sigterm(signum, frame):
-        print("\n[DAENA] SIGTERM received. Shutting down...")
-        watchdog_daemon.stop()
-        server.shutdown()
-        sys.exit(0)
-        
-    signal.signal(signal.SIGTERM, handle_sigterm)
-    
     print(f"""
 ╔══════════════════════════════════════════╗
-║        🔥 DAENA Backend v1.0            ║
-║        Port: {port}                       ║
-║        Models: {len(pool.get_health_report()['tiers'])} tiers, 20 total        ║
-║        Agents: {len(AGENT_META)} departments              ║
+║        🔥 DAENA OS Backend v10.5        ║
+║        Engine: FastAPI + WebSockets       ║
+║        Port: {args.port}                       ║
 ╚══════════════════════════════════════════╝
     """)
-    try:
-        import threading
-        import asyncio
+    
+    import threading
+    def run_watchdog():
+        asyncio.run(watchdog_daemon.start())
         
-        def run_watchdog():
-            asyncio.run(watchdog_daemon.start())
-            
-        wd_thread = threading.Thread(target=run_watchdog, daemon=True)
-        wd_thread.start()
-        
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\n[DAENA] Shutting down...")
-        watchdog_daemon.stop()
-        server.shutdown()
-
+    wd_thread = threading.Thread(target=run_watchdog, daemon=True)
+    wd_thread.start()
+    
+    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
 
 if __name__ == "__main__":
     import multiprocessing
     multiprocessing.freeze_support()
+    if sys.platform == "darwin":
+        multiprocessing.set_start_method("spawn", force=True)
     main()

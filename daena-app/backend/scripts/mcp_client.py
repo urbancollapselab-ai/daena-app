@@ -220,6 +220,10 @@ class MCPClient:
         for name in list(self._processes.keys()):
             self.disconnect(name)
 
+    def __del__(self):
+        """Ensure all subprocesses are cleaned up on garbage collection."""
+        self.disconnect_all()
+
 
 if __name__ == "__main__":
     client = MCPClient()

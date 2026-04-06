@@ -113,8 +113,10 @@ class DaenaScheduler:
         print(f"[Scheduler] Started with {len(self._schedules)} schedules")
 
     def stop(self):
-        """Stop the scheduler."""
+        """Stop the scheduler gracefully."""
         self._running = False
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=5)
 
     def _run_loop(self):
         """Main scheduler loop — checks every 30 seconds."""
@@ -148,16 +150,19 @@ class DaenaScheduler:
 
         try:
             if "default" in self._callbacks:
-                result = self._callbacks["default"](schedule["agent"], schedule["task"])
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(self._callbacks["default"], schedule["agent"], schedule["task"])
+                    result = future.result(timeout=120)  # 2-min max per task
                 entry["success"] = True
                 entry["result"] = str(result)[:200] if result else "OK"
             else:
-                print(f"[Scheduler] ⏰ {schedule['id']}: {schedule['task']} (no callback registered)")
+                print(f"[Scheduler] {schedule['id']}: {schedule['task']} (no callback)")
                 entry["success"] = True
                 entry["result"] = "Logged (no callback)"
         except Exception as e:
             entry["error"] = str(e)[:200]
-            print(f"[Scheduler] ❌ {schedule['id']}: {e}")
+            print(f"[Scheduler] Error {schedule['id']}: {e}")
 
         self._execution_log.append(entry)
         # Keep last 100 entries

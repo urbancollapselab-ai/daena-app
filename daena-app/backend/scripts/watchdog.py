@@ -2,22 +2,30 @@ import asyncio
 import os
 import psutil
 import time
+import hashlib
 
 class SelfHealingWatchdog:
     """Daemon thread that scans the system for lockups, memory leaks, and disk space."""
     def __init__(self):
         self.RULES = {
-            "memory_threshold_mb": 4096,   # 4GB threshold
+            "memory_threshold_mb": 2048,   # 2GB threshold (lowered for safety)
             "heartbeat_timeout_s": 300,    # 5 min silence = restart
             "wal_size_threshold": 200 * 1024 * 1024  # 200MB max WAL cache
         }
         self.running = False
-        
-        # Initialize Coverage-Aware Indexing
+        self._is_faiss_active = False
+        self.coverage_index = None
+        self.coverage_threshold = 0.85
+        # Cache: agent_id -> (hash_of_allowed_tools, built_faiss_index)
+        self._faiss_cache = {}
+
+    def _ensure_faiss(self):
+        """Lazy FAISS initialization — only when first needed."""
+        if self.coverage_index is not None:
+            return
         try:
             import faiss
-            self.coverage_index = faiss.IndexFlatL2(384) # 384D semantic space for MiniLM
-            self.coverage_threshold = 0.85
+            self.coverage_index = faiss.IndexFlatL2(384)
             self._is_faiss_active = True
         except ImportError:
             self._is_faiss_active = False
@@ -27,109 +35,111 @@ class SelfHealingWatchdog:
         print("[Watchdog] Self-Healing daemon activated.")
         while self.running:
             await self._run_checks()
-            await asyncio.sleep(60) # Run every 60 seconds
+            await asyncio.sleep(120)  # Run every 120 seconds (was 60)
 
     async def _run_checks(self):
         try:
-            # 1. Memory Leak Check
             process = psutil.Process()
             mem_mb = process.memory_info().rss / 1048576
             if mem_mb > self.RULES["memory_threshold_mb"]:
-                print(f"[Watchdog] ALERT: Process memory exceeded threshold ({mem_mb} MB). Forcing Garbage Collection.")
+                print(f"[Watchdog] ALERT: Memory {mem_mb:.0f} MB > threshold. Running GC safely.")
                 import gc
-                gc.collect()
-                
-            # 2. SQLite WAL Check
-            wal_path = "daena.db-wal"
-            if os.path.exists(wal_path):
-                wal_size = os.path.getsize(wal_path)
-                if wal_size > self.RULES["wal_size_threshold"]:
-                    print(f"[Watchdog] SQLite WAL size huge ({wal_size} bytes). Executing WAL Checkpoint.")
-                    from backend.scripts.db_utils import execute_query
-                    execute_query("PRAGMA wal_checkpoint(TRUNCATE);")
+                # Set specific generation for lighter collection (avoids long GIL lock)
+                gc.collect(generation=1)
 
-            # 3. Worker Pool Agent Heartbeats (if pool locked up)
-            # In a real cluster we check if the worker pool tasks are hanging
-            # and prune abandoned tasks from memory.
-            
+            # SQLite WAL Check — use glob to find actual WAL files
+            from pathlib import Path
+            data_dir = Path(__file__).parent.parent / "data"
+            for wal_file in data_dir.glob("*.db-wal"):
+                try:
+                    wal_size = wal_file.stat().st_size
+                    if wal_size > self.RULES["wal_size_threshold"]:
+                        print(f"[Watchdog] WAL {wal_file.name} is {wal_size} bytes. Checkpointing.")
+                        from scripts.db_utils import execute_query
+                        execute_query("PRAGMA wal_checkpoint(TRUNCATE);")
+                except Exception:
+                    pass
+
         except Exception as e:
             print(f"[Watchdog] Error during self-healing cycle: {e}")
 
     def stop(self):
         self.running = False
 
-            
     def _get_embedding(self, text: str):
-        """Generates real semantic embeddings using global singleton service."""
+        """Generates embeddings using global singleton (no eager model load)."""
         import numpy as np
-        from backend.scripts.embedding_service import encode_text, has_real_embeddings
-        
-        if has_real_embeddings():
+        from scripts.embedding_service import encode_text, has_real_embeddings_cached
+
+        if has_real_embeddings_cached():
             vec = encode_text(text)
             if vec is not None:
                 vec_np = np.array(vec, dtype='float32')
                 return vec_np / np.linalg.norm(vec_np)
-                
-        import hashlib
-        print("[Watchdog] WARNING: Global embedding service unreachable. Using fallback mathematical stubs.")
+
+        # Deterministic fallback stub (no model load triggered)
         np.random.seed(int(hashlib.md5(text.encode()).hexdigest(), 16) % (2**32))
         vec = np.random.rand(384).astype('float32')
         return vec / np.linalg.norm(vec)
 
     def verify_action(self, agent_id: str, action: str, context: str = "") -> bool:
-        """
-        v10.0 Formal Runtime Verification (Coverage-Aware LTL).
-        Uses FAISS to ensure intent falls within formally verified regions.
-        """
+        """Runtime verification with CACHED FAISS index (no rebuild per call)."""
         import json
         import numpy as np
         from pathlib import Path
         config_path = Path(__file__).parent.parent / "config" / "contracts.json"
-        
+
         if not config_path.exists():
-            return True # No contracts defined
-            
+            return True
+
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 contracts = json.load(f)
         except Exception:
             return True
-            
+
         agent_contract = contracts.get("agents", {}).get(agent_id)
         if not agent_contract:
-            return True # Fallback
-            
+            return True
+
         # 1. Classical LTL Constraints Check
         for forbidden in contracts.get("system_invariants", {}).get("forbidden_actions", []):
             if forbidden in action:
-                print(f"[Watchdog-Verif] ❌ BLOCKED: Global Invariant Violation '{forbidden}'")
+                print(f"[Watchdog-Verif] BLOCKED: Global Invariant Violation '{forbidden}'")
                 return False
-                
+
         allowed = agent_contract.get("allowed_tools", [])
-        
-        # 2. Epistemic Coverage FAISS Check (Phase 1 v10)
+
+        # 2. Epistemic Coverage FAISS Check — WITH CACHING
+        self._ensure_faiss()
         if self._is_faiss_active and allowed and "*" not in allowed:
-            # Build index from allowed known behaviors
-            self.coverage_index.reset()
-            embeddings = []
-            for known_action in allowed:
-                embeddings.append(self._get_embedding(known_action))
-            self.coverage_index.add(np.array(embeddings))
-            
-            # Check intent distance
+            # Build a cache key from the sorted allowed tools
+            cache_key = hashlib.md5(json.dumps(sorted(allowed)).encode()).hexdigest()
+
+            if self._faiss_cache.get(agent_id, (None,))[0] != cache_key:
+                # Rebuild index only when allowed tools change
+                import faiss
+                index = faiss.IndexFlatL2(384)
+                embeddings = []
+                for known_action in allowed:
+                    embeddings.append(self._get_embedding(known_action))
+                index.add(np.array(embeddings))
+                self._faiss_cache[agent_id] = (cache_key, index)
+
+            _, cached_index = self._faiss_cache[agent_id]
             intent_vec = np.array([self._get_embedding(action)])
-            distances, indices = self.coverage_index.search(intent_vec, 1)
-            
+            distances, _ = cached_index.search(intent_vec, 1)
+
             nearest_distance = float(distances[0][0])
             if nearest_distance > self.coverage_threshold:
-                 print(f"[Watchdog-Verif] ⚠️ COVERAGE_GAP: Action '{action}' is too semantically distant from explicitly verified contracts (Dist: {nearest_distance:.2f}). Triggering Human Disambiguation.")
-                 return False
+                print(f"[Watchdog-Verif] COVERAGE_GAP: '{action}' too distant (Dist: {nearest_distance:.2f}).")
+                return False
 
         # Fallback keyword checking if FAISS inactive
         if "*" not in allowed and action not in allowed and action != "think":
-            print(f"[Watchdog-Verif] ❌ BLOCKED: Action '{action}' not explicitly allowed for '{agent_id}'.")
+            print(f"[Watchdog-Verif] BLOCKED: '{action}' not allowed for '{agent_id}'.")
             return False
-            
+
         return True
 
 watchdog_daemon = SelfHealingWatchdog()

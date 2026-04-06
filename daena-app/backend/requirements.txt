@@ -5,13 +5,11 @@
 # MCP Protocol Support (optional but recommended)
 mcp[cli]>=1.0
 
-# Semantic Vector Memory (optional — falls back to FTS5 keyword search)
-sentence-transformers>=3.0
+# Semantic Vector Memory (Local, Ultra-fast ONNX based)
+fastembed>=0.2.0
 
-# Note: sentence-transformers pulls in torch (~2GB).
-# For lighter installation, skip this and use FTS5 fallback:
-#   pip install mcp[cli]
-scipy
+# Note: fastembed pulls in onnxruntime and tokenizers.
+# It is extremely lightweight compared to PyTorch.
 psutil
 numpy
 faiss-cpu
