@@ -1,117 +1,130 @@
 import { useAppStore } from "@/stores/appStore";
 import {
-  Search, LayoutDashboard, Users, Workflow, Hexagon, Database,
-  TerminalSquare, Settings, UserCircle, HelpCircle, ChevronDown, Fingerprint
+  MessageSquare, LayoutDashboard, Copy, Settings,
+  TerminalSquare, Box, Play, Check, ChevronDown, ChevronRight, Hash
 } from "lucide-react";
 import { useState } from "react";
 
 export function Sidebar() {
-  const { currentPage, setPage, agents } = useAppStore();
-  const [searchQuery, setSearchQuery] = useState("");
+  const { currentPage, setPage, conversations, activeConversationId, setActiveConversation, addConversation } = useAppStore();
+  const [explorerOpen, setExplorerOpen] = useState(true);
+  const [activityOpen, setActivityOpen] = useState(true);
 
-  const activeAgentCount = agents.filter(a => a.status !== "idle" && a.status !== "error").length;
-
-  const TOP_NAV = [
-    { id: "dashboard" as const, icon: LayoutDashboard, label: "Dashboard" },
-    { id: "chat" as const, icon: Workflow, label: "Orchestration" },
-    { id: "agents" as const, icon: Users, label: "Agents", badge: activeAgentCount },
-    { id: "models" as const, icon: Hexagon, label: "Models" },
-    { id: "knowledge" as const, icon: Database, label: "Knowledge Base" },
-    { id: "logs" as const, icon: TerminalSquare, label: "Logs" },
-    { id: "settings" as const, icon: Settings, label: "Settings" },
-  ];
-
-  const BOTTOM_NAV = [
-    { id: "account" as const, icon: UserCircle, label: "Account" },
-    { id: "help" as const, icon: HelpCircle, label: "Help" },
-  ];
+  // Filter basically today / older if needed, or just list all
+  const sortedConvs = [...conversations].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return (
-    <aside className="w-[260px] h-full bg-[#11131C] border-r border-white/5 flex flex-col z-20 font-sans text-white/70">
+    <div className="h-full flex bg-[#1e1e1e] border-r border-[#3c3c3c] select-none text-[#cccccc]">
       
-      {/* Brand Logo & Name */}
-      <div className="h-[72px] px-6 flex items-center gap-3">
-        <div className="w-8 h-8 rounded bg-[#6C63FF] grid place-items-center shrink-0">
-          <Fingerprint size={18} className="text-white" />
+      {/* Activity Bar (Icon Rail) */}
+      <div className="w-[48px] flex-shrink-0 flex flex-col items-center py-2 bg-[#333333] border-r border-[#252526]">
+        {/* Top Icons */}
+        <div className="flex flex-col gap-4 w-full items-center">
+          <NavIcon id="chat" icon={MessageSquare} active={currentPage === "chat"} onClick={() => {setPage("chat"); setExplorerOpen(true);}} />
+          <NavIcon id="dashboard" icon={LayoutDashboard} active={currentPage === "dashboard"} onClick={() => {setPage("dashboard"); setExplorerOpen(true);}} />
+          <NavIcon id="agents" icon={Box} active={currentPage === "agents"} onClick={() => {setPage("agents"); setExplorerOpen(true);}} />
         </div>
-        <div>
-          <h1 className="font-bold text-[15px] tracking-wide text-white/90 leading-none">AETHER AI</h1>
-          <span className="text-[10px] uppercase font-semibold text-white/40 tracking-wider">Command Center</span>
-        </div>
-      </div>
-
-      {/* Global Search */}
-      <div className="px-4 py-2">
-        <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
-          <input
-            type="text"
-            placeholder="Search Agents, Flows..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-white/5 border border-white/5 hover:border-white/10 focus:border-[#6C63FF] rounded-lg pl-9 pr-3 py-2 text-xs font-medium outline-none transition-all placeholder:text-white/30 text-white/90 focus:bg-[#1A1C23]"
-          />
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {TOP_NAV.map((item) => {
-          const isActive = currentPage === item.id || (currentPage === "chat" && item.id === "chat");
-          return (
-            <button
-              key={item.id}
-              onClick={() => {
-                if (["chat", "dashboard", "agents", "settings"].includes(item.id)) {
-                  setPage(item.id as any);
-                }
-              }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13px] font-medium transition-all group ${
-                isActive 
-                  ? "bg-white/10 text-white" 
-                  : "hover:bg-white/5 hover:text-white/90"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <item.icon size={16} className={isActive ? "text-white" : "text-white/40 group-hover:text-white/70 transition-colors"} />
-                {item.label}
-              </div>
-              {item.badge != null && item.badge > 0 && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[#6C63FF]/20 text-[#6C63FF]">
-                  {item.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-
-        <div className="pt-6 pb-2 px-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">Admin</div>
         
-        {BOTTOM_NAV.map((item) => (
-          <button
-            key={item.id}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium hover:bg-white/5 hover:text-white/90 transition-all text-white/70"
-          >
-            <item.icon size={16} className="text-white/40" />
-            {item.label}
-          </button>
-        ))}
-      </nav>
-
-      {/* User Profile */}
-      <div className="p-4 border-t border-white/5">
-        <button className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-all text-left">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#6C63FF] to-blue-400 grid place-items-center text-white font-bold text-xs shrink-0 shadow-lg">
-            AS
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white/90 truncate leading-tight">Alex S.</p>
-            <p className="text-[10px] text-white/40 truncate">Lead Engineer</p>
-          </div>
-          <ChevronDown size={14} className="text-white/30 shrink-0" />
-        </button>
+        {/* Bottom Icons */}
+        <div className="mt-auto flex flex-col gap-4 w-full items-center mb-2">
+          <NavIcon id="logs" icon={TerminalSquare} active={false} onClick={() => {}} />
+          <NavIcon id="settings" icon={Settings} active={currentPage === "settings"} onClick={() => setPage("settings")} />
+        </div>
       </div>
 
-    </aside>
+      {/* Explorer Panel */}
+      {explorerOpen && (
+        <div className="w-[250px] flex-shrink-0 flex flex-col bg-[#252526]">
+          {/* Header */}
+          <div className="px-5 py-3 text-[11px] font-semibold tracking-wider text-[#cccccc] uppercase flex items-center justify-between">
+            <span>Explorer</span>
+            <button className="text-[#cccccc] hover:text-white transition-colors" onClick={() => addConversation()}>+</button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {/* Folder: Open Editors (Simulated Dashboard) */}
+            <div className="flex flex-col">
+              <div 
+                className="flex items-center gap-1 hover:bg-[#2a2d2e] py-1 px-1 cursor-pointer"
+                onClick={() => setActivityOpen(!activityOpen)}
+              >
+                {activityOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                <span className="text-[11px] font-bold uppercase">Workspace</span>
+              </div>
+              
+              {activityOpen && (
+                <div className="flex flex-col ml-4">
+                   <FileItem 
+                     name="System_Status.dashboard" 
+                     active={currentPage === "dashboard"} 
+                     onClick={() => setPage("dashboard")} 
+                     iconColor="text-blue-400"
+                   />
+                   <FileItem 
+                     name="Agent_Orchestrator.ts" 
+                     active={currentPage === "agents"} 
+                     onClick={() => setPage("agents")} 
+                     iconColor="text-yellow-400"
+                   />
+                </div>
+              )}
+            </div>
+
+            {/* Folder: Conversations */}
+            <div className="flex flex-col mt-4">
+              <div className="flex items-center gap-1 hover:bg-[#2a2d2e] py-1 px-1 cursor-pointer">
+                <ChevronDown size={14} />
+                <span className="text-[11px] font-bold uppercase">Chats</span>
+              </div>
+              
+              <div className="flex flex-col ml-4">
+                {sortedConvs.map(conv => (
+                   <FileItem 
+                     key={conv.id}
+                     name={conv.title || "new_session.ts"} 
+                     active={currentPage === "chat" && activeConversationId === conv.id} 
+                     onClick={() => {
+                        setActiveConversation(conv.id);
+                        setPage("chat");
+                     }}
+                     isChat={true}
+                   />
+                ))}
+                {sortedConvs.length === 0 && (
+                   <div className="px-6 py-2 text-xs text-[#666666] italic">No active sessions</div>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NavIcon({ id, icon: Icon, active, onClick }: { id: string, icon: any, active: boolean, onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`relative w-full flex items-center justify-center p-2 text-[#858585] hover:text-white transition-colors ${active ? "text-white" : ""}`}
+    >
+      <Icon size={24} strokeWidth={active ? 2 : 1.5} />
+      {active && (
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[60%] bg-[#007fd4] rounded-r-md" />
+      )}
+    </button>
+  );
+}
+
+function FileItem({ name, active, onClick, iconColor, isChat }: { name: string, active: boolean, onClick: () => void, iconColor?: string, isChat?: boolean }) {
+  return (
+    <div 
+      onClick={onClick}
+      className={`flex items-center gap-2 pl-2 pr-4 py-1 text-[13px] cursor-pointer ${active ? "bg-[#37373d] text-white" : "hover:bg-[#2a2d2e] text-[#cccccc]"}`}
+    >
+      {isChat ? <Hash size={14} className="text-[#cccccc]" /> : <LayoutDashboard size={14} className={iconColor || "text-[#cccccc]"} />}
+      <span className="truncate">{name}</span>
+    </div>
   );
 }

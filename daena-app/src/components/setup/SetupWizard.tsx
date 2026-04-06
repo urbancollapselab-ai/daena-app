@@ -1,121 +1,34 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/stores/appStore";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Key, Bot, ChevronRight, ChevronLeft, Eye, EyeOff, Loader2, CheckCircle2,
-  XCircle, Brain, Layers, Users, BarChart3, Fingerprint, Lock, Zap
-} from "lucide-react";
-
-const STEPS = [
-  { id: "welcome", title: "Welcome" },
-  { id: "system",  title: "System" },
-  { id: "api",     title: "Connection" },
-  { id: "team",    title: "Company" },
-  { id: "ready",   title: "Launch" },
-];
-
-const SHOWCASE_SLIDES = [
-  {
-    icon: Brain,
-    title: "Cognitive Kernel Architecture",
-    desc: "Daena utilizes a fast, self-correcting brain system. When models fail, the alternative reality reactor automatically switches to fallback pools with zero latency.",
-    badge: "ENGINE v10.5",
-    color: "text-indigo-400"
-  },
-  {
-    icon: Users,
-    title: "Intelligent Agent Swarm",
-    desc: "Deploy specialized AI agents for Finance, Marketing, Data Analysis, and Sales. They collaborate, share context, and run workflows entirely autonomously.",
-    badge: "8 SPECIALIZED AGENTS",
-    color: "text-emerald-400"
-  },
-  {
-    icon: Lock,
-    title: "Enterprise Grade Security",
-    desc: "All processing happens securely. PII scrubbing, input sanitation, and robust output guards ensure your corporate data never leaks into the wild.",
-    badge: "ZERO TRUST DESIGN",
-    color: "text-rose-400"
-  },
-  {
-    icon: BarChart3,
-    title: "Real-time Neural Monitoring",
-    desc: "Watch the thought processes of your agents live. Daena provides a comprehensive live terminal, monitoring memory blocks, token usage, and epistemic health.",
-    badge: "LIVE TELEMETRY",
-    color: "text-amber-400"
-  }
-];
+import { Terminal, Copy, Command, Box, Server, Settings, Flag } from "lucide-react";
 
 export function SetupWizard({ onComplete }: { onComplete?: () => void }) {
   const { updateSettings, setSetupComplete, addConversation } = useAppStore();
-  const [step, setStep] = useState(0);
-  const [slideIdx, setSlideIdx] = useState(0);
-
+  
   const [apiKey, setApiKey] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [keyValid, setKeyValid] = useState<boolean | null>(null);
+  const [step, setStep] = useState(0);
 
-  const [claudePro, setClaudePro] = useState(false);
-  const [companyName, setCompanyName] = useState("");
+  // Fake IDE terminal log
+  const [logs, setLogs] = useState<string[]>([]);
 
-  const [statusText, setStatusText] = useState("Initializing neural link...");
-
-  // Auto-advance slides
   useEffect(() => {
-    const timer = setInterval(() => {
-      setSlideIdx(prev => (prev + 1) % SHOWCASE_SLIDES.length);
-    }, 6000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Fake system check simulation for immersion
-  useEffect(() => {
+    let timer: any;
     if (step === 1) {
-      const msgs = [
-        "Verifying node environment...",
-        "Checking Python 3.13 backend bindings...",
-        "Connecting to local WebSocket on port 8910...",
-        "Pinging OpenRouter infrastructure...",
-        "Validating desktop OS permissions...",
-        "System check complete. All systems nominal."
-      ];
-      let i = 0;
-      const t = setInterval(() => {
-        if (i < msgs.length) {
-          setStatusText(msgs[i]);
-          i++;
-        } else {
-          clearInterval(t);
-        }
-      }, 800);
-      return () => clearInterval(t);
+       setLogs(["[DAENA] Booting Core Kernel..."]);
+       timer = setTimeout(() => setLogs(p => [...p, "[SYS] Loading local agents (8)"]), 600);
+       timer = setTimeout(() => setLogs(p => [...p, "[SYS] Validating Tauri binary bindings... OK"]), 1200);
+       timer = setTimeout(() => setLogs(p => [...p, "[READY] Please supply OpenRouter key for model cascade"]), 1800);
     }
+    return () => clearTimeout(timer);
   }, [step]);
 
-  const testApiKey = async () => {
-    setTesting(true);
-    try {
-      const res = await fetch("https://openrouter.ai/api/v1/models", { headers: { Authorization: `Bearer ${apiKey}` } });
-      setKeyValid(res.ok);
-    } catch { setKeyValid(false); }
-    setTesting(false);
-  };
-
-  const checkClaudePro = async () => {
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const data: any = await invoke("check_claude");
-      if (data.available) setClaudePro(true);
-    } catch { setClaudePro(false); }
-  };
-
   const handleNext = () => {
-    if (step === 2) {
+    if (step === 1 && apiKey.length > 5) {
       updateSettings({ openrouterKey: apiKey });
-      updateSettings({ claudePath: claudePro ? "/opt/homebrew/bin/claude" : undefined });
+      setStep(2);
+      return;
     }
-    if (step === 3) updateSettings({ companyName });
-    if (step === 4) {
+    if (step === 2) {
       addConversation();
       setSetupComplete(true);
       if (onComplete) onComplete();
@@ -124,242 +37,95 @@ export function SetupWizard({ onComplete }: { onComplete?: () => void }) {
     setStep(s => s + 1);
   };
 
-  const slide = SHOWCASE_SLIDES[slideIdx];
-
   return (
-    <div className="fixed inset-0 bg-[#0C0E16] flex w-full h-screen overflow-hidden text-[#EEEEF2] font-sans">
-      
-      {/* LEFT SIDE: Beautiful Presentation Panel */}
-      <div className="hidden lg:flex w-[55%] relative overflow-hidden bg-[#11131C] border-r border-white/5 flex-col justify-between p-12">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#11131C] to-[#0A0B10] z-0" />
-        
-        {/* Top Logo */}
-        <div className="z-10 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#6C63FF] grid place-items-center">
-            <Fingerprint size={18} className="text-white" />
-          </div>
-          <span className="font-bold text-xl tracking-wide">AETHER AI</span>
-          <span className="text-xs font-semibold px-2 py-1 bg-white/10 rounded-md text-white/70 ml-2">Enterprise Edition</span>
-        </div>
+    <div className="flex w-full h-screen bg-[#1e1e1e] text-[#cccccc] font-sans overflow-hidden">
+       {/* Sidebar (Fake for Setup) */}
+       <div className="w-[200px] border-r border-[#3c3c3c] bg-[#252526] flex flex-col pt-3">
+          <div className="px-5 py-2 text-[11px] font-semibold uppercase text-[#858585]">Daena Setup</div>
+          <div className={`px-5 py-1.5 text-[13px] ${step === 0 ? 'text-white bg-[#37373d]' : ''}`}>1. init.sh</div>
+          <div className={`px-5 py-1.5 text-[13px] ${step === 1 ? 'text-white bg-[#37373d]' : ''}`}>2. config_api.json</div>
+          <div className={`px-5 py-1.5 text-[13px] ${step === 2 ? 'text-white bg-[#37373d]' : ''}`}>3. launch.bat</div>
+       </div>
 
-        {/* Dynamic Presentation Slide */}
-        <div className="z-10 w-full max-w-xl self-center relative flex-1 flex items-center">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={slideIdx}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-              className="space-y-6"
-            >
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 mb-4">
-                <span className={`w-2 h-2 rounded-full bg-current ${slide.color} animate-pulse`} />
-                <span className={`text-[0.65rem] font-bold tracking-widest ${slide.color}`}>{slide.badge}</span>
-              </div>
-              
-              <h1 className="text-5xl font-extrabold leading-tight tracking-tight text-white/90">
-                {slide.title}
-              </h1>
-              
-              <p className="text-lg text-white/50 leading-relaxed max-w-lg">
-                {slide.desc}
-              </p>
-
-            </motion.div>
-          </AnimatePresence>
-        </div>
-
-        {/* Slide Nav Bottom */}
-        <div className="z-10 flex items-center gap-3">
-          {SHOWCASE_SLIDES.map((_, idx) => (
-            <div 
-              key={idx} 
-              className={`h-1.5 rounded-full transition-all duration-700 ${idx === slideIdx ? "w-12 bg-[#6C63FF]" : "w-4 bg-white/10"}`} 
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* RIGHT SIDE: Interactive Minimalist Setup Area */}
-      <div className="w-full lg:w-[45%] h-full flex flex-col items-center justify-center relative p-8">
-        
-        <div className="w-full max-w-md">
-          {/* Progress Indicator */}
-          <div className="flex items-center justify-between mb-12">
-            <div className="text-xs font-semibold tracking-wider text-white/40 uppercase">
-              Step {step + 1} of 5
-            </div>
-            <div className="flex gap-2">
-              {STEPS.map((s, i) => (
-                <div key={s.id} className={`w-8 h-1 rounded-full transition-colors ${i <= step ? "bg-[#6C63FF]" : "bg-white/10"}`} />
-              ))}
-            </div>
-          </div>
-
-          {/* Form Content Container */}
-          <div className="min-h-[320px]">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={step}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.3 }}
-              >
-                {/* Step 1: Welcome Overview */}
-                {step === 0 && (
-                  <div className="space-y-6">
-                    <h2 className="text-3xl font-bold text-white/90">Initialize Workspace</h2>
-                    <p className="text-sm text-white/50 leading-relaxed">
-                      Welcome to your new cognitive command center. We will perform a brief configuration 
-                      to establish secure connections to your required LLM providers and set up your active environment.
-                    </p>
-                    <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                      <div className="flex gap-3">
-                        <Zap size={20} className="text-[#6C63FF] shrink-0" />
-                        <div>
-                          <p className="text-sm font-semibold text-white/80">Native Execution Enabled</p>
-                          <p className="text-xs text-white/40 mt-1">
-                            This application runs locally via Tauri & Python Backend. All code execution is isolated.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 2: System Status */}
-                {step === 1 && (
-                  <div className="space-y-6">
-                    <h2 className="text-3xl font-bold text-white/90">System Integrity</h2>
-                    <p className="text-sm text-white/50">Running diagnostic pass on required backend services.</p>
-                    
-                    <div className="font-mono text-[0.65rem] sm:text-xs text-[#00D4AA] bg-[#0A0B10] border border-white/5 p-4 rounded-lg shadow-inner h-32 flex flex-col justify-end">
-                      <p className="opacity-60">{`> Boot sequence initiated...`}</p>
-                      <p className="opacity-80">{`> ${statusText}`}</p>
-                      <p className="animate-pulse">{`> _`}</p>
-                    </div>
-
-                    <p className="text-xs text-white/40 italic flex items-center gap-1">
-                      <CheckCircle2 size={12} className="text-[#00D4AA]" /> Auto-healing active. No action required.
-                    </p>
-                  </div>
-                )}
-
-                {/* Step 3: API Key */}
-                {step === 2 && (
-                  <div className="space-y-6">
-                    <h2 className="text-3xl font-bold text-white/90">Connect Provider</h2>
-                    <p className="text-sm text-white/50">Provide an OpenRouter API key to access 20+ models instantly.</p>
-                    
-                    <div className="space-y-2">
-                       <label className="text-xs font-semibold text-white/60">OPENROUTER API KEY</label>
-                       <div className="relative">
-                          <input 
-                            type={showKey ? "text" : "password"} 
-                            value={apiKey}
-                            onChange={(e) => setApiKey(e.target.value)}
-                            placeholder="sk-or-v1-..."
-                            className="w-full bg-[#1A1C23] border border-white/10 rounded-lg px-4 py-3 text-sm focus:border-[#6C63FF] focus:ring-1 focus:ring-[#6C63FF] outline-none transition-all placeholder:text-white/20"
-                          />
-                          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                            <button onClick={testApiKey} disabled={apiKey.length < 10 || testing} className="px-2 py-1 rounded bg-[#6C63FF]/20 text-[#6C63FF] text-xs font-semibold disabled:opacity-50">
-                              {testing ? <Loader2 size={12} className="animate-spin" /> : "Verify"}
-                            </button>
-                            <button onClick={() => setShowKey(!showKey)} className="p-1.5 text-white/40 hover:text-white/80">
-                              {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                            </button>
-                          </div>
-                       </div>
-                       {keyValid === true && <p className="text-xs text-[#00D4AA] flex items-center gap-1 mt-2"><CheckCircle2 size={12} /> Connection established completely.</p>}
-                       {keyValid === false && <p className="text-xs text-[#FF5757] flex items-center gap-1 mt-2"><XCircle size={12} /> Invalid API Key. Connection refused.</p>}
-                    </div>
-
-                    <div className="pt-2">
-                      <button onClick={checkClaudePro} className="w-full p-4 rounded-xl border border-white/5 bg-[#1A1C23] hover:bg-[#20222A] transition-colors flex items-center justify-between text-left group">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-[#f2e1cf] grid place-items-center">
-                            <Layers size={14} className="text-[#a55f46]" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-white/80 group-hover:text-white">Opus Native Fallback (Optional)</p>
-                            <p className="text-xs text-white/40">Use your local Claude Pro account via CLI.</p>
-                          </div>
-                        </div>
-                        {claudePro ? <CheckCircle2 size={18} className="text-[#00D4AA]" /> : <ChevronRight size={18} className="text-white/20 group-hover:text-white/50" />}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 4: Company Context */}
-                {step === 3 && (
-                  <div className="space-y-6">
-                    <h2 className="text-3xl font-bold text-white/90">Organization Sync</h2>
-                    <p className="text-sm text-white/50">To provide tailored responses, agents need to know what they are operating.</p>
-                    
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold text-white/60">COMPANY OR PROJECT NAME</label>
-                      <input 
-                        value={companyName}
-                        onChange={(e) => setCompanyName(e.target.value)}
-                        placeholder="e.g. Acme Corp, Project Alpha..."
-                        className="w-full bg-[#1A1C23] border border-white/10 rounded-lg px-4 py-3 text-sm focus:border-[#6C63FF] focus:ring-1 focus:ring-[#6C63FF] outline-none transition-all placeholder:text-white/20"
-                      />
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-[#1A1C23] border border-white/5">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-white/80">Deploy Default Capabilities</p>
-                          <p className="text-xs text-white/40 mt-0.5">Loads 8 standard agents automatically.</p>
-                        </div>
-                        <div className="w-10 h-6 bg-[#6C63FF] rounded-full p-1 cursor-not-allowed">
-                          <div className="w-4 h-4 bg-white rounded-full translate-x-4 shadow-sm" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 5: Launch */}
-                {step === 4 && (
-                  <div className="space-y-6">
-                    <div className="w-16 h-16 rounded-2xl bg-[#6C63FF]/20 text-[#6C63FF] flex items-center justify-center mb-6">
-                      <CheckCircle2 size={32} />
-                    </div>
-                    <h2 className="text-3xl font-bold text-white/90">All Systems Go</h2>
-                    <p className="text-sm text-white/50">
-                      Configuration complete. Your Enterprise Command Center has synchronized perfectly and is ready to accept prime directives.
-                    </p>
-                  </div>
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-
-          {/* Action Footer */}
-          <div className="mt-12 flex items-center justify-between border-t border-white/5 pt-6">
-             <button 
-               onClick={() => setStep(s => s - 1)} 
-               disabled={step === 0} 
-               className="px-4 py-2 text-sm font-semibold text-white/40 hover:text-white/80 disabled:opacity-0 transition-colors"
-             >
-               Back
-             </button>
-             <button 
-               onClick={handleNext}
-               disabled={(step === 2 && apiKey.length < 10 && !claudePro) || (step === 3 && companyName.length === 0)}
-               className="px-6 py-2.5 rounded-lg bg-[#EEEEF2] text-[#060810] font-bold text-sm tracking-wide hover:bg-white disabled:opacity-30 transition-all flex items-center gap-2"
-             >
-               {step === 4 ? "Launch Dashboard" : "Continue"}
-               {step < 4 && <ChevronRight size={16} />}
-             </button>
+       {/* Editor Pane */}
+       <div className="flex-1 flex flex-col bg-[#1e1e1e]">
+          <div className="flex h-[35px] bg-[#2d2d2d] border-b border-[#252526]">
+             <div className="px-4 flex items-center border-t-2 border-[#007fd4] bg-[#1e1e1e] text-[13px] text-white">
+                setup_wizard.ts <span className="ml-2 text-[#858585]">x</span>
+             </div>
           </div>
           
-        </div>
-      </div>
+          <div className="flex-1 p-8 overflow-y-auto relative">
+             <div className="max-w-xl mx-auto mt-10">
+                {step === 0 && (
+                   <div className="fade-in">
+                      <div className="flex items-center gap-4 mb-8">
+                         <div className="w-16 h-16 bg-[#252526] border border-[#3c3c3c] rounded flex items-center justify-center shadow-lg">
+                            {/* Represents the Zoroastrian/Daena fire/wings simple icon */}
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                               <path d="M12 2L15 8H9L12 2Z" fill="#cca700"/>
+                               <path d="M12 22L9 16H15L12 22Z" fill="#cca700"/>
+                               <path d="M2 12L8 9V15L2 12Z" fill="#cca700"/>
+                               <path d="M22 12L16 15V9L22 12Z" fill="#cca700"/>
+                               <circle cx="12" cy="12" r="3" fill="#e5b567"/>
+                            </svg>
+                         </div>
+                         <div>
+                            <h1 className="text-2xl font-bold text-white">Daena Cognitive Kernel</h1>
+                            <p className="text-[13px] text-[#858585]">IDE Edition v11.0</p>
+                         </div>
+                      </div>
+
+                      <div className="text-[13px] leading-relaxed mb-6 space-y-4">
+                         <p>Welcome to Daena. This environment is structured as a dedicated Integrated Development Environment (IDE) for interacting with your autonomous agents.</p>
+                         <p>Daena replaces traditional UI elements with a command-driven chat interface, embedded file execution previews, and pure developer capabilities.</p>
+                      </div>
+
+                      <button onClick={handleNext} className="btn-primary py-1.5 px-4">Continue Execution</button>
+                   </div>
+                )}
+
+                {step === 1 && (
+                   <div className="fade-in">
+                      <h2 className="text-lg font-bold text-white mb-4">Environment Variables Required</h2>
+                      <div className="bg-[#1e1e1e] border border-[#3c3c3c] rounded mb-6 p-2 font-mono text-[12px] h-32 flex flex-col justify-end">
+                         {logs.map((l, i) => (
+                           <div key={i} className="text-[#cccccc] mb-1">{l}</div>
+                         ))}
+                         <div className="animate-pulse text-[#858585]">_</div>
+                      </div>
+
+                      <div className="mb-6">
+                         <label className="block text-[12px] text-[#858585] mb-1 font-mono">export OPENROUTER_API_KEY=</label>
+                         <input 
+                           type="password"
+                           value={apiKey}
+                           onChange={e => setApiKey(e.target.value)}
+                           className="ide-input w-full font-mono py-2 bg-[#252526]"
+                           placeholder="sk-or-v1-..."
+                         />
+                      </div>
+
+                      <button onClick={handleNext} disabled={apiKey.length < 5} className="btn-primary py-1.5 px-4 h-8">
+                         Save Configuration
+                      </button>
+                   </div>
+                )}
+
+                {step === 2 && (
+                   <div className="fade-in text-center">
+                      <div className="w-16 h-16 bg-[#252526] border border-[#3c3c3c] rounded-full flex items-center justify-center mx-auto mb-6 text-[#89d185]">
+                         <Terminal size={32} />
+                      </div>
+                      <h2 className="text-xl font-bold text-white mb-2">Build Successful</h2>
+                      <p className="text-[13px] text-[#858585] mb-8">Daena IDE is ready to accept commands.</p>
+
+                      <button onClick={handleNext} className="btn-primary py-2 px-8">Launch Workspace</button>
+                   </div>
+                )}
+             </div>
+          </div>
+       </div>
     </div>
   );
 }
