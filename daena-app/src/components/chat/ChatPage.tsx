@@ -2,24 +2,15 @@ import { useState, useRef, useEffect } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { sendMessage, getModelDisplayName, isModelFree } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Paperclip, Mic, Sparkles, ArrowDown, Clock, Zap, Bot, User, Copy, Check } from "lucide-react";
-import { useTranslation } from "@/i18n";
+import { Send, Paperclip, Mic, ArrowDown, Clock, Zap, Bot, User, CheckCircle2, ChevronRight, XIcon, Loader2 } from "lucide-react";
 import type { ChatMessage } from "@/types";
 
 const QUICK_ACTIONS = [
-  { icon: "\ud83d\udcb0", label: "Create Invoice", desc: "Finance agent", prompt: "@finance Create an invoice" },
-  { icon: "\ud83d\udcca", label: "Find Leads", desc: "Data agent", prompt: "@data Find new leads in my industry" },
-  { icon: "\ud83d\udce3", label: "Write Content", desc: "Marketing agent", prompt: "@marketing Write a social media post" },
-  { icon: "\ud83d\udd2c", label: "Research", desc: "Research agent", prompt: "@research Analyze market trends" },
-  { icon: "\ud83c\udfaf", label: "Sales Outreach", desc: "Sales agent", prompt: "@sales Draft a cold email template" },
-  { icon: "\ud83e\udde0", label: "System Status", desc: "Main Brain", prompt: "Show me the current system status" },
+  { icon: "💰", label: "Create Invoice", desc: "Finance agent", prompt: "@finance Create an invoice" },
+  { icon: "📊", label: "Find Leads", desc: "Data agent", prompt: "@data Find new leads" },
+  { icon: "📣", label: "Write Content", desc: "Marketing agent", prompt: "@marketing Draft a post" },
+  { icon: "🔬", label: "Research", desc: "Research agent", prompt: "@research Market trends" },
 ];
-
-const AGENT_ICONS: Record<string, string> = {
-  finance: "\ud83d\udcb0", data: "\ud83d\udcca", marketing: "\ud83d\udce3",
-  sales: "\ud83c\udfaf", research: "\ud83d\udd2c", watchdog: "\ud83d\udee1\ufe0f",
-  heartbeat: "\ud83d\udc93", coordinator: "\ud83c\udfad", main_brain: "\ud83e\udde0",
-};
 
 export function ChatPage() {
   const {
@@ -28,18 +19,18 @@ export function ChatPage() {
   } = useAppStore();
   const [input, setInput] = useState("");
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const { t } = useTranslation();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeConv = conversations.find((c) => c.id === activeConversationId);
   const messages = activeConv?.messages || [];
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
+  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(() => { scrollToBottom(); }, [messages.length]);
 
   const handleScroll = () => {
@@ -49,9 +40,15 @@ export function ChatPage() {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
-    const text = input.trim();
+    if ((!input.trim() && !attachedFile) || isLoading) return;
+    
+    let text = input.trim();
+    if (attachedFile) {
+      text = `[Attachment: ${attachedFile.name}]\n${text}`;
+    }
+
     setInput("");
+    setAttachedFile(null);
 
     let convId = activeConversationId;
     if (!convId) { convId = addConversation(); }
@@ -75,7 +72,7 @@ export function ChatPage() {
 
     try {
       const result = await sendMessage(text, targetAgent);
-      const assistantMsg: ChatMessage = {
+      addMessage(convId, {
         id: `msg_${Date.now()}_resp`,
         role: "assistant",
         content: result.response,
@@ -84,16 +81,14 @@ export function ChatPage() {
         timestamp: new Date().toISOString(),
         tokens: result.tokens,
         latencyMs: result.latency_ms,
-      };
-      addMessage(convId, assistantMsg);
+      });
     } catch {
-      const errorMsg: ChatMessage = {
+      addMessage(convId, {
         id: `msg_${Date.now()}_err`,
         role: "assistant",
-        content: "Backend is not responding. Please check that the Daena backend is running.",
+        content: "System Error: Backend is not responding.",
         timestamp: new Date().toISOString(),
-      };
-      addMessage(convId, errorMsg);
+      });
     }
     setLoading(false);
   };
@@ -102,25 +97,46 @@ export function ChatPage() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
-  const handleQuickAction = (prompt: string) => {
-    setInput(prompt);
-    inputRef.current?.focus();
+  const startVoice = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice recognition not supported in this environment.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    
+    recognition.onstart = () => setIsRecording(true);
+    recognition.onresult = (e: any) => {
+      const transcript = e.results[0][0].transcript;
+      setInput(prev => prev + (prev ? " " : "") + transcript);
+    };
+    recognition.onerror = () => setIsRecording(false);
+    recognition.onend = () => setIsRecording(false);
+    recognition.start();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setAttachedFile(e.target.files[0]);
+    }
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-[#0C0E16]">
       {/* Messages */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-6"
+        className="flex-1 overflow-y-auto px-6 py-6"
       >
         {messages.length === 0 ? (
-          <EmptyState onQuickAction={handleQuickAction} t={t} />
+          <EmptyState onQuickAction={t => { setInput(t); inputRef.current?.focus(); }} />
         ) : (
-          <div className="max-w-3xl mx-auto space-y-5">
+          <div className="max-w-4xl mx-auto space-y-6">
             {messages.map((msg, i) => (
-              <MessageBubble key={msg.id} message={msg} index={i} />
+              <MessageBubble key={msg.id} message={msg} />
             ))}
             {isLoading && <TypingIndicator />}
             <div ref={messagesEndRef} />
@@ -128,7 +144,6 @@ export function ChatPage() {
         )}
       </div>
 
-      {/* Scroll to bottom */}
       <AnimatePresence>
         {showScrollBtn && (
           <motion.button
@@ -136,7 +151,7 @@ export function ChatPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             onClick={scrollToBottom}
-            className="absolute bottom-28 left-1/2 -translate-x-1/2 w-10 h-10 rounded-full glass border border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-border-hover)] z-30 transition-all"
+            className="absolute bottom-28 left-1/2 -translate-x-1/2 w-10 h-10 rounded-full bg-[#1A1C23] border border-white/10 flex items-center justify-center hover:bg-white/10 transition-all z-30"
           >
             <ArrowDown size={16} />
           </motion.button>
@@ -144,240 +159,137 @@ export function ChatPage() {
       </AnimatePresence>
 
       {/* Input Area */}
-      <div className="border-t border-[var(--color-border)] bg-[var(--color-bg-card)]/60 backdrop-blur-xl px-4 py-3">
-        <div className="max-w-3xl mx-auto">
-          <div className="glass-sm flex items-end gap-2 p-2.5 focus-within:border-[var(--color-primary)] focus-within:shadow-[0_0_0_3px_var(--color-primary-dim)] transition-all">
-            <button className="p-2 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-tertiary)] flex-shrink-0 mb-0.5 transition-colors">
+      <div className="p-4 bg-[#0C0E16] border-t border-white/5">
+        <div className="max-w-4xl mx-auto flex flex-col gap-2">
+          
+          {attachedFile && (
+            <div className="flex items-center gap-2 self-start px-3 py-1.5 rounded-lg bg-[#6C63FF]/10 border border-[#6C63FF]/30 text-xs text-[#6C63FF]">
+               <Paperclip size={12} />
+               <span className="truncate max-w-[200px]">{attachedFile.name}</span>
+               <button onClick={() => setAttachedFile(null)} className="p-0.5 hover:bg-[#6C63FF]/20 rounded"><XIcon size={12} /></button>
+            </div>
+          )}
+
+          <div className={`flex items-end gap-2 bg-[#1A1C23] border ${isRecording ? 'border-[#FF5757] shadow-[0_0_15px_rgba(255,87,87,0.2)]' : 'border-white/10'} rounded-xl p-2 transition-all`}>
+            
+            <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
+            <button onClick={() => fileInputRef.current?.click()} className="p-2 rounded-lg hover:bg-white/5 text-white/40 transition-colors shrink-0">
               <Paperclip size={18} />
             </button>
+            
             <textarea
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={t("chat.empty")}
+              placeholder={isRecording ? "Listening..." : "Type a message or trigger an @agent..."}
               rows={1}
-              className="flex-1 bg-transparent border-none outline-none resize-none text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] py-2 max-h-32 leading-relaxed"
-              style={{ minHeight: "36px" }}
-              onInput={(e) => {
+              className="flex-1 bg-transparent border-none outline-none resize-none text-sm text-white/90 placeholder:text-white/30 py-2.5 max-h-40 leading-relaxed"
+              style={{ minHeight: "40px" }}
+              onInput={e => {
                 const el = e.currentTarget;
-                el.style.height = "36px";
-                el.style.height = Math.min(el.scrollHeight, 128) + "px";
+                el.style.height = "40px";
+                el.style.height = Math.min(el.scrollHeight, 160) + "px";
               }}
             />
-            <button className="p-2 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-tertiary)] flex-shrink-0 mb-0.5 transition-colors">
+            
+            <button onClick={startVoice} className={`p-2 rounded-lg hover:bg-white/5 transition-colors shrink-0 ${isRecording ? 'text-[#FF5757] animate-pulse' : 'text-white/40'}`}>
               <Mic size={18} />
             </button>
+            
             <button
               onClick={handleSend}
-              disabled={!input.trim() || isLoading}
-              className={`p-2.5 rounded-xl flex-shrink-0 mb-0.5 transition-all ${
-                input.trim() && !isLoading
-                  ? "bg-gradient-to-r from-[var(--color-primary)] to-[#8B7BFF] text-white shadow-lg shadow-[var(--color-primary-dim)] hover:shadow-[var(--color-primary-glow)]"
-                  : "text-[var(--color-text-tertiary)]"
+              disabled={(!input.trim() && !attachedFile) || isLoading}
+              className={`p-2.5 rounded-lg shrink-0 transition-all ${
+                (input.trim() || attachedFile) && !isLoading
+                  ? "bg-[#6C63FF] text-white shadow-lg hover:bg-[#7b73ff]"
+                  : "bg-white/5 text-white/20"
               }`}
             >
               <Send size={16} />
             </button>
           </div>
-          <p className="text-[0.5625rem] text-center text-[var(--color-text-tertiary)] mt-2">
-            {t("chat.footnote")}
-          </p>
         </div>
       </div>
     </div>
   );
 }
 
-function EmptyState({ onQuickAction, t }: { onQuickAction: (p: string) => void; t: any }) {
+function EmptyState({ onQuickAction }: { onQuickAction: (p: string) => void }) {
   return (
-    <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto text-center px-4">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="w-full"
-      >
-        {/* Logo */}
-        <div className="relative w-24 h-24 mx-auto mb-8">
-          <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)] opacity-20 blur-xl" />
-          <div className="relative w-24 h-24 rounded-3xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)] flex items-center justify-center shadow-2xl shadow-[var(--color-primary-dim)]">
-            <Sparkles size={40} className="text-white" />
-          </div>
-        </div>
+    <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto text-center">
+      <div className="w-16 h-16 rounded-2xl bg-[#6C63FF]/20 border border-[#6C63FF]/30 flex items-center justify-center mb-6">
+         <Bot size={32} className="text-[#6C63FF]" />
+      </div>
+      <h2 className="text-2xl font-bold mb-2">How can I assist?</h2>
+      <p className="text-sm text-white/40 mb-10">Select a prompt or ask a general query</p>
 
-        <h2 className="text-2xl font-extrabold mb-2 bg-gradient-to-r from-[var(--color-text-primary)] to-[var(--color-text-secondary)] bg-clip-text text-transparent">
-          How can I help?
-        </h2>
-        <p className="text-sm text-[var(--color-text-secondary)] mb-10">
-          8 AI agents, 20 models, one command center
-        </p>
-
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 w-full">
-          {QUICK_ACTIONS.map((qa, i) => (
-            <motion.button
-              key={qa.label}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 + i * 0.05 }}
-              onClick={() => onQuickAction(qa.prompt)}
-              className="glass-sm glass-hover p-4 text-left group"
-            >
-              <span className="text-2xl mb-3 block">{qa.icon}</span>
-              <div className="text-xs font-semibold text-[var(--color-text-primary)] mb-0.5">{qa.label}</div>
-              <div className="text-[0.625rem] text-[var(--color-text-tertiary)] group-hover:text-[var(--color-text-secondary)] transition-colors">{qa.desc}</div>
-            </motion.button>
-          ))}
-        </div>
-      </motion.div>
+      <div className="grid grid-cols-2 gap-3 w-full max-w-xl">
+        {QUICK_ACTIONS.map((qa) => (
+          <button
+            key={qa.label}
+            onClick={() => onQuickAction(qa.prompt)}
+            className="p-4 rounded-xl text-left bg-[#1A1C23] border border-white/5 hover:border-white/10 hover:bg-[#20222A] transition-all group"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xl">{qa.icon}</span>
+              <ChevronRight size={14} className="text-white/10 group-hover:text-white/30" />
+            </div>
+            <div className="text-[13px] font-semibold text-white/80">{qa.label}</div>
+            <div className="text-[10px] text-white/40 mt-1">{qa.desc}</div>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
 
-function MessageBubble({ message, index }: { message: ChatMessage; index: number }) {
+function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(message.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const agentIcon = message.agent ? AGENT_ICONS[message.agent] || "\ud83e\udde0" : null;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: 0.03 }}
-      className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}
+      className={`flex gap-4 ${isUser ? "flex-row-reverse" : ""}`}
     >
-      {/* Avatar */}
-      <div className={`flex-shrink-0 ${isUser ? "" : ""}`}>
+      <div className="shrink-0 mt-1">
         {isUser ? (
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[var(--color-primary)] to-[#8B7BFF] flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#6C63FF] to-blue-400 flex items-center justify-center shadow-lg">
             <User size={14} className="text-white" />
           </div>
         ) : (
-          <div className="w-8 h-8 rounded-xl bg-[var(--color-surface-elevated)] border border-[var(--color-border)] flex items-center justify-center text-sm">
-            {agentIcon || "\ud83e\udde0"}
+          <div className="w-8 h-8 rounded-full bg-[#1A1C23] border border-white/10 flex items-center justify-center">
+            <Bot size={14} className="text-white/60" />
           </div>
         )}
       </div>
 
-      {/* Content */}
-      <div className={`max-w-[80%] ${isUser ? "items-end" : "items-start"}`}>
-        {/* Agent label */}
+      <div className={`max-w-[75%] flex flex-col ${isUser ? "items-end" : "items-start"}`}>
         {!isUser && message.agent && (
           <div className="flex items-center gap-1.5 mb-1.5 ml-1">
-            <span className="text-[0.6875rem] font-semibold capitalize" style={{
-              color: message.agent === "finance" ? "#00D4AA" : message.agent === "data" ? "#22D3EE" :
-                message.agent === "marketing" ? "#FB7185" : message.agent === "sales" ? "#FFB547" :
-                message.agent === "research" ? "#A78BFA" : "#6C63FF",
-            }}>
-              {message.agent}
-            </span>
-            <span className="text-[0.5625rem] text-[var(--color-text-tertiary)]">agent</span>
+            <span className="text-[10px] font-bold tracking-wider text-[#6C63FF] uppercase">{message.agent} agent</span>
           </div>
         )}
 
         <div
-          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed group relative ${
+          className={`px-5 py-3.5 text-[13px] leading-relaxed relative ${
             isUser
-              ? "bg-gradient-to-r from-[var(--color-primary)] to-[#8B7BFF] text-white rounded-tr-md shadow-lg shadow-[var(--color-primary-dim)]"
-              : "glass-sm text-[var(--color-text-primary)] rounded-tl-md"
+              ? "bg-[#1A1C23] border border-white/10 text-white/90 rounded-2xl rounded-tr-sm"
+              : "bg-transparent text-white/80"
           }`}
         >
-          {/* ── v6.0 Generative UI Native Rendering ── */}
-          {(() => {
-            // Check if the message is a Generative UI payload
-            if (!isUser && message.content.trim().startsWith('{"ui_component":')) {
-              try {
-                const uiData = JSON.parse(message.content.trim());
-                
-                // ── v10.0 Specification Adversary (Visual Diff) ──
-                if (uiData.ui_component === "disambiguation") {
-                  return (
-                    <div className="generative-ui-widget w-full mt-2 border border-purple-500/30 rounded-xl overflow-hidden bg-black/40">
-                      <div className="bg-purple-500/20 px-3 py-2 text-xs font-semibold flex items-center gap-2 text-purple-200 border-b border-purple-500/30">
-                        <Sparkles size={12} className="text-purple-400" />
-                        Specification Adversary: Intent Ambiguity Detected
-                      </div>
-                      <div className="p-4 text-sm text-[var(--color-text-secondary)]">
-                        {uiData.message || "Multiple causal paths detected. Please disambiguate:"}
-                        <div className="mt-4 flex flex-col gap-2">
-                          {uiData.paths?.map((path: any, idx: number) => (
-                            <button key={idx} className="text-left px-3 py-2 rounded bg-white/5 border border-white/10 hover:bg-purple-500/10 hover:border-purple-500/50 transition-colors group">
-                               <div className="font-semibold text-purple-300 text-xs mb-1">Path {idx + 1}: {path.intent_interpretation}</div>
-                               <div className="text-[0.6875rem] font-mono text-gray-300">{path.dag_preview}</div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                if (uiData.ui_component === "chart" || uiData.ui_component === "table" || uiData.ui_component === "approval") {
-                  return (
-                    <div className="generative-ui-widget w-full mt-2 border border-[var(--color-primary-dim)] rounded-xl overflow-hidden bg-black/20">
-                      <div className="bg-[var(--color-primary-dim)] px-3 py-1.5 text-xs font-semibold flex items-center gap-2 text-white">
-                        <Sparkles size={12} className="text-[var(--color-accent)]" />
-                        Generative UI: {uiData.ui_component.toUpperCase()}
-                      </div>
-                      <div className="p-4 text-sm font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap">
-                        {JSON.stringify(uiData.data, null, 2)}
-                      </div>
-                      {uiData.ui_component === "approval" && (
-                         <div className="flex gap-2 p-3 bg-white/5 border-t border-white/5">
-                            <button className="flex-1 py-1.5 rounded bg-emerald-500/20 text-emerald-400 font-semibold hover:bg-emerald-500/30 transition-colors">Approve Action</button>
-                            <button className="flex-1 py-1.5 rounded bg-rose-500/20 text-rose-400 font-semibold hover:bg-rose-500/30 transition-colors">Block Execution</button>
-                         </div>
-                      )}
-                    </div>
-                  );
-                }
-              } catch (e) {
-                // Not valid JSON or failed to parse, fallback to markdown
-              }
-            }
-            return <div className="markdown-content whitespace-pre-wrap">{message.content}</div>;
-          })()}
-
-          {/* Copy button */}
-          {!isUser && (
-            <button
-              onClick={handleCopy}
-              className="absolute -bottom-1 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] hover:border-[var(--color-border-hover)]"
-            >
-              {copied ? <Check size={12} className="text-[var(--color-accent)]" /> : <Copy size={12} className="text-[var(--color-text-tertiary)]" />}
-            </button>
-          )}
+          <div className="whitespace-pre-wrap">{message.content}</div>
         </div>
 
         {/* Meta row */}
-        <div className={`flex items-center gap-2.5 mt-1.5 ${isUser ? "justify-end" : ""} px-1`}>
-          <span className="text-[0.5625rem] text-[var(--color-text-tertiary)] flex items-center gap-1">
-            <Clock size={9} />
-            {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          </span>
+        <div className={`flex items-center gap-3 mt-1.5 px-1 opacity-50`}>
+          <span className="text-[10px] flex items-center gap-1"><Clock size={10} /> {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
           {!isUser && message.model && (
-            <span className={`model-tag ${isModelFree(message.model) ? "!text-[var(--color-accent)] !border-[var(--color-accent-dim)]" : "!text-[var(--color-warning)] !border-[var(--color-warning-dim)]"}`}>
-              <Zap size={8} />
-              {getModelDisplayName(message.model)}
-              {isModelFree(message.model) ? " FREE" : ""}
-            </span>
+            <span className="text-[10px] flex items-center gap-1"><Zap size={10} /> {getModelDisplayName(message.model)}</span>
           )}
-          {!isUser && message.latencyMs != null && (
-            <span className="text-[0.5rem] text-[var(--color-text-tertiary)] font-mono">
-              {message.latencyMs}ms
-            </span>
-          )}
-          {!isUser && message.tokens != null && (
-            <span className="text-[0.5rem] text-[var(--color-text-tertiary)] font-mono">
-              {message.tokens} tok
-            </span>
+          {!isUser && message.latencyMs && (
+             <span className="text-[10px] font-mono">{message.latencyMs}ms</span>
           )}
         </div>
       </div>
@@ -387,20 +299,14 @@ function MessageBubble({ message, index }: { message: ChatMessage; index: number
 
 function TypingIndicator() {
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="flex gap-3"
-    >
-      <div className="w-8 h-8 rounded-xl bg-[var(--color-surface-elevated)] border border-[var(--color-border)] flex items-center justify-center text-sm">
-        {"\ud83e\udde0"}
-      </div>
-      <div className="glass-sm rounded-2xl rounded-tl-md px-5 py-4">
-        <div className="flex gap-1.5">
-          <div className="typing-dot" />
-          <div className="typing-dot" />
-          <div className="typing-dot" />
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-4">
+      <div className="shrink-0 mt-1">
+        <div className="w-8 h-8 rounded-full bg-[#1A1C23] border border-white/10 flex items-center justify-center">
+          <Loader2 size={14} className="text-[#6C63FF] animate-spin" />
         </div>
+      </div>
+      <div className="flex items-center px-4 py-3 bg-transparent">
+        <div className="text-[13px] text-white/40 font-medium">Processing request...</div>
       </div>
     </motion.div>
   );

@@ -1,247 +1,117 @@
 import { useAppStore } from "@/stores/appStore";
 import {
-  MessageSquare, LayoutDashboard, Users, Settings, Plus,
-  Pin, Trash2, PanelLeftClose, PanelLeft, Search, Radio
+  Search, LayoutDashboard, Users, Workflow, Hexagon, Database,
+  TerminalSquare, Settings, UserCircle, HelpCircle, ChevronDown, Fingerprint
 } from "lucide-react";
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useTranslation } from "@/i18n";
 
 export function Sidebar() {
-  const { t } = useTranslation();
-  const {
-    currentPage, setPage, conversations, activeConversationId,
-    addConversation, setActiveConversation, deleteConversation,
-    sidebarCollapsed, toggleSidebar, agents,
-  } = useAppStore();
+  const { currentPage, setPage, agents } = useAppStore();
   const [searchQuery, setSearchQuery] = useState("");
-  const [hoveredConv, setHoveredConv] = useState<string | null>(null);
 
   const activeAgentCount = agents.filter(a => a.status !== "idle" && a.status !== "error").length;
 
-  const NAV_ITEMS = [
-    { id: "chat" as const, icon: MessageSquare, label: t("nav.chat") },
-    { id: "dashboard" as const, icon: LayoutDashboard, label: t("nav.dashboard") },
-    { id: "agents" as const, icon: Users, label: t("nav.agents"), badge: activeAgentCount },
-    { id: "settings" as const, icon: Settings, label: t("nav.settings") },
+  const TOP_NAV = [
+    { id: "dashboard" as const, icon: LayoutDashboard, label: "Dashboard" },
+    { id: "chat" as const, icon: Workflow, label: "Orchestration" },
+    { id: "agents" as const, icon: Users, label: "Agents", badge: activeAgentCount },
+    { id: "models" as const, icon: Hexagon, label: "Models" },
+    { id: "knowledge" as const, icon: Database, label: "Knowledge Base" },
+    { id: "logs" as const, icon: TerminalSquare, label: "Logs" },
+    { id: "settings" as const, icon: Settings, label: "Settings" },
   ];
 
-  const filtered = conversations.filter((c) =>
-    c.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const todayConvs = filtered.filter((c) => {
-    const d = new Date(c.createdAt);
-    return d.toDateString() === new Date().toDateString();
-  });
-  const olderConvs = filtered.filter((c) => {
-    const d = new Date(c.createdAt);
-    return d.toDateString() !== new Date().toDateString();
-  });
+  const BOTTOM_NAV = [
+    { id: "account" as const, icon: UserCircle, label: "Account" },
+    { id: "help" as const, icon: HelpCircle, label: "Help" },
+  ];
 
   return (
-    <motion.aside
-      className="flex flex-col h-full border-r border-[var(--color-border)] bg-[var(--color-bg-card)]/80 backdrop-blur-xl relative z-20"
-      animate={{ width: sidebarCollapsed ? 64 : 280 }}
-      transition={{ duration: 0.2, ease: "easeInOut" }}
-    >
-      {/* Logo */}
-      <div className="flex items-center justify-between px-4 h-14 border-b border-[var(--color-border)]">
-        {!sidebarCollapsed && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-center gap-2.5"
-          >
-            <div className="w-8 h-8 rounded-xl overflow-hidden shadow-lg shadow-[var(--color-primary-dim)]">
-              <img src="/daena-logo.png" alt="Daena" className="w-full h-full object-cover" />
-            </div>
-            <div>
-              <span className="font-extrabold text-sm tracking-wide">Daena</span>
-              <span className="text-[0.5625rem] text-[var(--color-text-tertiary)] ml-1.5">v1.0</span>
-            </div>
-          </motion.div>
-        )}
-        {sidebarCollapsed && (
-          <div className="w-8 h-8 rounded-xl overflow-hidden mx-auto shadow-lg shadow-[var(--color-primary-dim)]">
-            <img src="/daena-logo.png" alt="Daena" className="w-full h-full object-cover" />
-          </div>
-        )}
-        {!sidebarCollapsed && (
-          <button
-            onClick={toggleSidebar}
-            className="p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-tertiary)] transition-colors"
-          >
-            <PanelLeftClose size={16} />
-          </button>
-        )}
+    <aside className="w-[260px] h-full bg-[#11131C] border-r border-white/5 flex flex-col z-20 font-sans text-white/70">
+      
+      {/* Brand Logo & Name */}
+      <div className="h-[72px] px-6 flex items-center gap-3">
+        <div className="w-8 h-8 rounded bg-[#6C63FF] grid place-items-center shrink-0">
+          <Fingerprint size={18} className="text-white" />
+        </div>
+        <div>
+          <h1 className="font-bold text-[15px] tracking-wide text-white/90 leading-none">AETHER AI</h1>
+          <span className="text-[10px] uppercase font-semibold text-white/40 tracking-wider">Command Center</span>
+        </div>
       </div>
 
-      {sidebarCollapsed && (
-        <button
-          onClick={toggleSidebar}
-          className="mx-auto mt-2 p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-tertiary)] transition-colors"
-        >
-          <PanelLeft size={16} />
-        </button>
-      )}
+      {/* Global Search */}
+      <div className="px-4 py-2">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+          <input
+            type="text"
+            placeholder="Search Agents, Flows..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-white/5 border border-white/5 hover:border-white/10 focus:border-[#6C63FF] rounded-lg pl-9 pr-3 py-2 text-xs font-medium outline-none transition-all placeholder:text-white/30 text-white/90 focus:bg-[#1A1C23]"
+          />
+        </div>
+      </div>
 
       {/* Navigation */}
-      <nav className="px-2 py-2 space-y-0.5">
-        {NAV_ITEMS.map((item) => {
-          const isActive = currentPage === item.id;
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        {TOP_NAV.map((item) => {
+          const isActive = currentPage === item.id || (currentPage === "chat" && item.id === "chat");
           return (
             <button
               key={item.id}
-              onClick={() => setPage(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all relative ${
-                isActive
-                  ? "bg-[var(--color-primary-dim)] text-[var(--color-primary)] font-medium"
-                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+              onClick={() => {
+                if (["chat", "dashboard", "agents", "settings"].includes(item.id)) {
+                  setPage(item.id as any);
+                }
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13px] font-medium transition-all group ${
+                isActive 
+                  ? "bg-white/10 text-white" 
+                  : "hover:bg-white/5 hover:text-white/90"
               }`}
-              title={sidebarCollapsed ? item.label : undefined}
             >
-              {isActive && (
-                <motion.div
-                  layoutId="nav-indicator"
-                  className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[var(--color-primary)]"
-                />
-              )}
-              <item.icon size={18} />
-              {!sidebarCollapsed && (
-                <>
-                  <span className="flex-1 text-left">{item.label}</span>
-                  {item.badge != null && (
-                    <span className="text-[0.5625rem] font-bold px-1.5 py-0.5 rounded-md bg-[var(--color-accent-dim)] text-[var(--color-accent)]">
-                      {item.badge}
-                    </span>
-                  )}
-                </>
+              <div className="flex items-center gap-3">
+                <item.icon size={16} className={isActive ? "text-white" : "text-white/40 group-hover:text-white/70 transition-colors"} />
+                {item.label}
+              </div>
+              {item.badge != null && item.badge > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[#6C63FF]/20 text-[#6C63FF]">
+                  {item.badge}
+                </span>
               )}
             </button>
           );
         })}
+
+        <div className="pt-6 pb-2 px-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">Admin</div>
+        
+        {BOTTOM_NAV.map((item) => (
+          <button
+            key={item.id}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium hover:bg-white/5 hover:text-white/90 transition-all text-white/70"
+          >
+            <item.icon size={16} className="text-white/40" />
+            {item.label}
+          </button>
+        ))}
       </nav>
 
-      {!sidebarCollapsed && (
-        <>
-          {/* New Chat + Search */}
-          <div className="px-3 py-2 space-y-2 border-t border-[var(--color-border)]">
-            <button
-              onClick={() => { addConversation(); setPage("chat"); }}
-              className="btn-primary w-full justify-center text-xs py-2.5"
-            >
-              <Plus size={14} /> {t("nav.newChat")}
-            </button>
-            <div className="relative">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]" />
-              <input
-                type="text"
-                placeholder={t("nav.search")}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="glass-input w-full pl-8 pr-3 py-1.5 text-xs"
-              />
-            </div>
+      {/* User Profile */}
+      <div className="p-4 border-t border-white/5">
+        <button className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-all text-left">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#6C63FF] to-blue-400 grid place-items-center text-white font-bold text-xs shrink-0 shadow-lg">
+            AS
           </div>
-
-          {/* Conversation List */}
-          <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
-            {todayConvs.length > 0 && (
-              <div className="px-2 py-1.5">
-                <span className="text-[0.5625rem] font-bold text-[var(--color-text-tertiary)] uppercase tracking-wider">{t("nav.today")}</span>
-              </div>
-            )}
-            {todayConvs.map((conv) => (
-              <ConvItem
-                key={conv.id}
-                title={conv.title}
-                active={conv.id === activeConversationId}
-                pinned={conv.pinned}
-                hovered={hoveredConv === conv.id}
-                onMouseEnter={() => setHoveredConv(conv.id)}
-                onMouseLeave={() => setHoveredConv(null)}
-                onClick={() => { setActiveConversation(conv.id); setPage("chat"); }}
-                onDelete={() => deleteConversation(conv.id)}
-              />
-            ))}
-
-            {olderConvs.length > 0 && (
-              <div className="px-2 py-1.5 mt-2">
-                <span className="text-[0.5625rem] font-bold text-[var(--color-text-tertiary)] uppercase tracking-wider">{t("nav.previous") || "Previous"}</span>
-              </div>
-            )}
-            {olderConvs.map((conv) => (
-              <ConvItem
-                key={conv.id}
-                title={conv.title}
-                active={conv.id === activeConversationId}
-                pinned={conv.pinned}
-                hovered={hoveredConv === conv.id}
-                onMouseEnter={() => setHoveredConv(conv.id)}
-                onMouseLeave={() => setHoveredConv(null)}
-                onClick={() => { setActiveConversation(conv.id); setPage("chat"); }}
-                onDelete={() => deleteConversation(conv.id)}
-              />
-            ))}
-
-            {filtered.length === 0 && (
-              <div className="px-3 py-10 text-center text-[var(--color-text-tertiary)] text-xs">
-                {searchQuery ? "No conversations found" : "No conversations yet"}
-              </div>
-            )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-white/90 truncate leading-tight">Alex S.</p>
+            <p className="text-[10px] text-white/40 truncate">Lead Engineer</p>
           </div>
+          <ChevronDown size={14} className="text-white/30 shrink-0" />
+        </button>
+      </div>
 
-          {/* Bottom Status */}
-          <div className="px-3 py-3 border-t border-[var(--color-border)]">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-[var(--color-accent)] animate-pulse" />
-              <span className="text-[0.5625rem] text-[var(--color-text-tertiary)]">
-                {activeAgentCount} agents active
-              </span>
-              <span className="text-[0.5625rem] text-[var(--color-text-tertiary)] ml-auto">20 models</span>
-            </div>
-          </div>
-        </>
-      )}
-    </motion.aside>
-  );
-}
-
-function ConvItem({
-  title, active, pinned, hovered, onClick, onDelete, onMouseEnter, onMouseLeave,
-}: {
-  title: string; active: boolean; pinned: boolean; hovered: boolean;
-  onClick: () => void; onDelete: () => void;
-  onMouseEnter: () => void; onMouseLeave: () => void;
-}) {
-  return (
-    <div
-      onClick={onClick}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-      className={`group flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer text-xs transition-all ${
-        active
-          ? "bg-[var(--color-surface-active)] text-[var(--color-text-primary)] border-l-2 border-[var(--color-primary)]"
-          : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
-      }`}
-    >
-      {pinned && <Pin size={10} className="text-[var(--color-warning)] flex-shrink-0" />}
-      <MessageSquare size={12} className="text-[var(--color-text-tertiary)] flex-shrink-0" />
-      <span className="truncate flex-1">{title}</span>
-      <AnimatePresence>
-        {hovered && (
-          <motion.button
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className="p-1 rounded-md hover:bg-[var(--color-error-dim)] text-[var(--color-text-tertiary)] hover:text-[var(--color-error)] transition-colors"
-          >
-            <Trash2 size={11} />
-          </motion.button>
-        )}
-      </AnimatePresence>
-    </div>
+    </aside>
   );
 }

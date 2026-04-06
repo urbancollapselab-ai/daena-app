@@ -10,7 +10,6 @@ import { DashboardPage } from "@/components/dashboard/DashboardPage";
 import { AgentsPage } from "@/components/agents/AgentsPage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { TopBar } from "@/components/layout/TopBar";
 
 declare global {
   interface Window {
@@ -35,7 +34,6 @@ export default function App() {
       setSetupComplete(false);
     }
     
-    // Connect WebSockets immediately for ultra-low latency streams
     import("@/stores/wsTransport").then(m => {
       m.useWSStore.getState().connect();
     });
@@ -46,48 +44,32 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-[var(--color-bg-deep)] relative overflow-hidden text-neutral-200 font-sans">
-      {/* Ambient Glow Orbs — GPU-friendly (use CSS classes, not inline blur) */}
-      <div className="ambient-orb ambient-orb-1" />
-      <div className="ambient-orb ambient-orb-2" />
-      <div className="ambient-orb ambient-orb-3" />
-
-      {/* Subtle grid pattern for depth */}
-      <div className="absolute inset-0 grid-pattern pointer-events-none z-0" />
-
+    <div className="flex h-screen bg-[#060810] relative overflow-hidden text-white/90 font-sans">
+      
       {/* Overlays */}
       {showVoiceMode && <VoiceMode onClose={() => setShowVoiceMode(false)} />}
       {showMobilePairing && <MobilePairing onClose={() => setShowMobilePairing(false)} />}
 
       <Sidebar />
 
-      <div className="flex-1 flex flex-col relative z-10 min-w-0">
-        <TopBar />
+      <main className="flex-1 flex w-full h-full p-4 lg:p-6 gap-6 min-w-0">
+        
+        {/* Central Content Area (Chat/Settings/etc) */}
+        <div className={`transition-all duration-500 ease-out min-w-0 bg-[#0C0E16] border border-white/5 rounded-2xl overflow-hidden shadow-xl ${
+            currentPage === "chat" ? "flex-[2]" : "flex-1"
+        }`}>
+          {currentPage === "chat" && <ChatPage />}
+          {currentPage === "dashboard" && <DashboardPage />}
+          {currentPage === "agents" && <AgentsPage />}
+          {currentPage === "settings" && <SettingsPage />}
+        </div>
 
-        {/* Main Content Area */}
-        <main className="flex-1 overflow-hidden p-4 lg:p-6">
-          <div className="flex w-full h-full gap-4 lg:gap-6">
-            {/* Active Content */}
-            <div
-              className={`transition-all duration-500 ease-out min-w-0 ${
-                currentPage === "chat" ? "flex-[2]" : "flex-1"
-              } glass rounded-2xl overflow-hidden`}
-            >
-              {currentPage === "chat" && <ChatPage />}
-              {currentPage === "dashboard" && <DashboardPage />}
-              {currentPage === "agents" && <AgentsPage />}
-              {currentPage === "settings" && <SettingsPage />}
-            </div>
+        {/* Live System Monitor/Terminal (Option 2 right side) */}
+        <div className="hidden xl:flex flex-1 min-w-[280px] max-w-[380px] h-full flex-col">
+          <SystemMonitor />
+        </div>
 
-            {/* Live System Monitor — only on chat page */}
-            {currentPage === "chat" && (
-              <div className="hidden xl:block flex-1 min-w-[280px] max-w-[420px] h-full fade-in">
-                <SystemMonitor />
-              </div>
-            )}
-          </div>
-        </main>
-      </div>
+      </main>
     </div>
   );
 }

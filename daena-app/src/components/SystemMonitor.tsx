@@ -1,90 +1,143 @@
-import React, { useMemo } from 'react';
-import { ReactFlow, Controls, Background, useNodesState, useEdgesState, BackgroundVariant } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
-import { Brain, Database, LineChart, Code, Building, Map, ShoppingCart, TestTube2, MessageSquare } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { useAppStore } from '@/stores/appStore';
+import { TerminalSquare, Cpu, Box, CheckCircle2, ChevronRight, Activity, Clock } from 'lucide-react';
 
-const iconMap = {
-  main_brain: Brain,
-  finance: LineChart,
-  data: Database,
-  marketing: Map,
-  sales: ShoppingCart,
-  research: TestTube2,
-  coordinator: Building,
-  terminal: Code
-};
-
-// Custom Node to look totally sci-fi / premium
-const AgentNode = ({ data, selected }: { data: any, selected: boolean }) => {
-  const Icon = iconMap[data.id as keyof typeof iconMap] || MessageSquare;
-  const isActive = data.status === 'active';
-  
-  return (
-    <div className={`px-4 py-3 rounded-xl border-2 backdrop-blur-md transition-all duration-300 ${
-      isActive 
-        ? 'bg-emerald-950/80 border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.3)]' 
-        : 'bg-neutral-900/80 border-neutral-800'
-    } ${selected ? 'ring-2 ring-white' : ''}`}>
-      <div className="flex items-center space-x-3">
-        <div className={`p-2 rounded-lg ${isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-neutral-800 text-neutral-400'}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-        <div>
-          <div className={`font-bold text-sm ${isActive ? 'text-white' : 'text-neutral-300'}`}>{data.name}</div>
-          <div className="text-[10px] uppercase tracking-wider text-neutral-500 mt-0.5">{isActive ? 'İşlem Başında' : 'Beklemede'}</div>
-        </div>
-        {isActive && (
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-2" />
-        )}
-      </div>
-      {/* Node output handlers for react flow would be here in a full generic implementation */}
-    </div>
-  );
-};
-
-const nodeTypes = {
-  agentNode: AgentNode,
-};
-
-const initialNodes = [
-  { id: '1', type: 'agentNode', position: { x: 250, y: 50 }, data: { id: 'main_brain', name: 'Main Brain', status: 'active' } },
-  { id: '2', type: 'agentNode', position: { x: 50, y: 200 }, data: { id: 'research', name: 'Research', status: 'idle' } },
-  { id: '3', type: 'agentNode', position: { x: 250, y: 200 }, data: { id: 'finance', name: 'Finance', status: 'idle' } },
-  { id: '4', type: 'agentNode', position: { x: 450, y: 200 }, data: { id: 'data', name: 'Data Center', status: 'idle' } },
-  { id: '5', type: 'agentNode', position: { x: 150, y: 350 }, data: { id: 'terminal', name: 'Terminal / Claude', status: 'idle' } },
-  { id: '6', type: 'agentNode', position: { x: 350, y: 350 }, data: { id: 'coordinator', name: 'DAG Planner', status: 'idle' } },
-];
-
-const initialEdges = [
-  { id: 'e1-2', source: '1', target: '2', animated: true, style: { stroke: '#10b981', strokeWidth: 2 } },
-  { id: 'e1-3', source: '1', target: '3', style: { stroke: '#3f3f46', strokeWidth: 1 } },
-  { id: 'e1-4', source: '1', target: '4', style: { stroke: '#3f3f46', strokeWidth: 1 } },
-  { id: 'e2-5', source: '2', target: '5', animated: true, style: { stroke: '#10b981', strokeWidth: 2 } },
-  { id: 'e3-6', source: '3', target: '6', style: { stroke: '#3f3f46', strokeWidth: 1 } },
-];
+interface LogLine {
+  id: string;
+  time: string;
+  type: string;
+  message: string;
+  color: string;
+}
 
 export const SystemMonitor = () => {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const { agents } = useAppStore();
+  const [logs, setLogs] = useState<LogLine[]>([]);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  // Generate some fake live logs for the visual effect of a monitoring system
+  useEffect(() => {
+    const logTypes = [
+      { t: "INFO", c: "text-[#00D4AA]" },
+      { t: "DATA", c: "text-[#22D3EE]" },
+      { t: "SYSTEM", c: "text-[#6C63FF]" },
+      { t: "WARN", c: "text-[#FFB547]" }
+    ];
+
+    const messages = [
+      "Agent-Alpha started Processing",
+      "Resource usage: CPU 12%, MEM 4.2GB",
+      "Analyzing sales_data_q3.csv (25%)",
+      "Allocating tensor buffers...",
+      "Context window optimized",
+      "Vector search completed in 14ms",
+      "Running semantic extraction...",
+    ];
+
+    let timer: any;
+    const addLog = () => {
+      const type = logTypes[Math.floor(Math.random() * logTypes.length)];
+      const msg = messages[Math.floor(Math.random() * messages.length)];
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' });
+      
+      setLogs(prev => {
+        const newLogs = [...prev, { id: Math.random().toString(), time, type: type.t, message: msg, color: type.c }];
+        if (newLogs.length > 50) return newLogs.slice(newLogs.length - 50);
+        return newLogs;
+      });
+
+      timer = setTimeout(addLog, Math.random() * 3000 + 1000);
+    };
+
+    addLog();
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
+
+  const activeAgents = agents.filter(a => a.status === 'active' || a.status === 'running');
+  const idleAgents = agents.filter(a => a.status === 'idle' || a.status === 'monitoring');
 
   return (
-    <div className="w-full h-full bg-neutral-950 rounded-2xl border border-neutral-800 overflow-hidden relative">
-      <div className="absolute top-4 left-4 z-10 bg-neutral-900/80 backdrop-blur px-4 py-2 rounded-full border border-neutral-800 text-xs font-semibold text-neutral-300 flex items-center shadow-lg">
-        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse mr-2" />
-        CANLI SİSTEM HARİTASI
-      </div>
+    <div className="w-full h-full flex flex-col gap-4 font-sans text-white/90">
       
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        nodeTypes={nodeTypes}
-        fitView
-      >
-        <Background color="#10b981" variant={BackgroundVariant.Dots} gap={24} size={1} className="opacity-20" />
-        <Controls className="bg-neutral-900 border border-neutral-800 fill-white" />
-      </ReactFlow>
+      {/* Terminal Block */}
+      <div className="flex-1 bg-[#11131C] border border-white/5 rounded-xl flex flex-col overflow-hidden shadow-sm">
+        <div className="h-10 border-b border-white/5 px-4 flex items-center justify-between bg-white/[0.02]">
+          <div className="flex items-center gap-2">
+             <TerminalSquare size={14} className="text-white/40" />
+             <span className="text-xs font-semibold text-white/60">Terminal: live-monitor [bash]</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#FF5757]/80" />
+            <div className="w-2.5 h-2.5 rounded-full bg-[#FFB547]/80" />
+            <div className="w-2.5 h-2.5 rounded-full bg-[#00D4AA]/80" />
+          </div>
+        </div>
+        <div className="flex-1 p-4 overflow-y-auto font-mono text-[11px] leading-relaxed tracking-wide space-y-1">
+          {logs.map((log) => (
+            <div key={log.id} className="flex gap-3 text-white/50">
+              <span className="text-white/30 shrink-0">{log.time}</span>
+              <span className={`shrink-0 font-bold ${log.color}`}>[{log.type}]</span>
+              <span className="break-all">{log.message}</span>
+            </div>
+          ))}
+          <div ref={logsEndRef} />
+        </div>
+      </div>
+
+      {/* Agents Status Block */}
+      <div className="flex-1 flex flex-col gap-3">
+        <div className="flex items-center justify-between px-1">
+           <span className="text-xs font-semibold text-white/60">Agent Status</span>
+           <span className="text-[10px] uppercase font-bold text-[#00D4AA] tracking-wider bg-[#00D4AA]/10 px-2 py-0.5 rounded-md">
+             {activeAgents.length} Active
+           </span>
+        </div>
+
+        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+          {activeAgents.map(ag => (
+            <div key={ag.id} className="bg-[#11131C] border border-[#00D4AA]/30 rounded-xl p-3 shadow-[0_0_15px_rgba(0,212,170,0.05)] text-sm relative overflow-hidden">
+               <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#00D4AA] animate-pulse" />
+               <div className="flex items-center justify-between mb-2">
+                 <div className="flex items-center gap-2">
+                   <div className="w-5 h-5 rounded bg-white/5 flex items-center justify-center text-xs">
+                     {ag.icon}
+                   </div>
+                   <span className="font-semibold text-white/90">{ag.name}</span>
+                 </div>
+                 <span className="text-[10px] text-[#00D4AA] font-bold">Active</span>
+               </div>
+               <div className="text-xs text-white/50 mb-2 truncate">
+                 TASK: {ag.id === 'main_brain' ? 'Orchestrating workflow' : 'Processing incoming data stream'}
+               </div>
+               <div className="flex items-center gap-4 text-[10px] text-white/40 font-mono">
+                 <span className="flex items-center gap-1"><Cpu size={10} /> CPU: {Math.floor(Math.random() * 20 + 5)}%</span>
+                 <span className="flex items-center gap-1"><Clock size={10} /> {Math.floor(Math.random() * 10 + 1)}m 12s</span>
+               </div>
+            </div>
+          ))}
+
+          {idleAgents.slice(0, 3).map(ag => (
+            <div key={ag.id} className="bg-[#11131C] border border-white/5 rounded-xl p-3 text-sm opacity-60">
+               <div className="flex items-center justify-between mb-2">
+                 <div className="flex items-center gap-2">
+                   <div className="w-5 h-5 rounded bg-white/5 flex items-center justify-center text-xs grayscale">
+                     {ag.icon}
+                   </div>
+                   <span className="font-medium text-white/70">{ag.name}</span>
+                 </div>
+                 <span className="text-[10px] text-white/30 font-bold bg-white/5 px-2 py-0.5 rounded">Idle</span>
+               </div>
+               <div className="text-xs text-white/40 truncate">
+                 Status: Waiting for invocation
+               </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };
